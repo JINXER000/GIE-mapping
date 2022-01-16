@@ -6,8 +6,7 @@ The supplementary video can be viewed here:
 <p align="center">
 <a href="https://youtu.be/Hd2Hpf-hFNs
 " target="_blank"><img src="figure/coverpage.png"
-alt="GIE-mapping  introduction video" width="720" height="540" /></a>
+alt="GIE-mapping  introduction video" width="480" height="270" /></a>
 </p>
-
 
 We will release the source code upon acceptance of our paper. 
