@@ -8,7 +8,7 @@ This work has been accepted by IEEE Robotics and Automation Letters 2022.
 This software is a volumetric mapping
 system that effectively calculates Occupancy Grid Maps (OGMs)
 and Euclidean Distance Transforms (EDTs) with GPU. 
-Extensive field tests has been carried out with different robots and range sensors. The proposed system achieves realtime
+Extensive experiments have been carried out with different robots and range sensors. The proposed system achieves real-time
 performance with limited onboard computational resources.
 
 
@@ -81,6 +81,8 @@ source devel/setup.bash
 ```
 Before launching any examples, please revise the *log_dir* parameter in the corresponding .yaml file
 to your own directory, otherwise an error will be thrown. 
+
+# Launch the mapper
 ## Try with datasets
 ### UGV-corridor
 Please download the dataset [here](https://drive.google.com/file/d/1COHl_jEaWHl09kPolfXgYs66_YTrb3uH/view?usp=sharing).
@@ -121,19 +123,18 @@ Simply remap the input data in volumetric_mapper.cpp to your own sensor topics!
 Remember to set *use_sim_time* parameter in each launch file as **false** in the real world.
 
 ### Speed up tricks
-- Turn off Rviz during the run, since it will occupy large amount of GPU resource.
+- Turn off Rviz during the run since it will occupy a large amount of GPU resources.
 - Disable both *display_glb_edt* and *display_glb_ogm* parameter. Hence the GPU hash table won't be streamed to CPU at every iteration.
 
 ### Integrate with motion planners
-Our system publish the EDT surround as CostMap.msg in topic "cost_map". Each voxel contains the visibility information and the distance value.
+Our system publishes the EDT surround as CostMap.msg in the topic "cost_map". Each voxel contains visibility information and the distance value.
 
-To access the global EDT, a GPU-based motion planner  is recommended to be implemented together with GIE-mapping. 
+To access the global EDT directly, you are recommended to implement a  GPU-based motion planner together with GIE-mapping. 
 Each voxel  can be retrieved by using function  *get_VB_key()* and *get_voxID_in_VB()*.  
 
-## Additional features
+# Additional features
 ### Frontiers for exploration
-The system extracts low-level frontiers for exploration. The data type of **VOXTYPE_FNT** denotes the 
-voxel belongs to the low-level frontier.
+The system extracts low-level frontiers for exploration. The data type of **VOXTYPE_FNT** denotes the voxel that belongs to the low-level frontier. You may need to do some post-process to filter out the noise. 
 
 ### Signed distance 
 Developing
