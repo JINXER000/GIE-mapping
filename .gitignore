@@ -1,0 +1,16 @@
+spatialrepresentations/dynamicEDT3D/bin/
+spatialrepresentations/dynamicEDT3D/build/
+spatialrepresentations/dynamicEDT3D/lib/
+spatialrepresentations/dynamicEDT3D/src/CMakeFiles/
+spatialrepresentations/dynamicEDT3D/src/Makefile
+spatialrepresentations/dynamicEDT3D/src/cmake_install.cmake
+spatialrepresentations/dynamicEDT3D/src/examples/CMakeFiles/
+spatialrepresentations/dynamicEDT3D/src/examples/Makefile
+spatialrepresentations/dynamicEDT3D/src/examples/cmake_install.cmake
+RollingEDT/build-RollingEDT-Desktop_Qt_5_9_1_GCC_64bit-Debug/
+RollingEDT/build-RollingEDT-Desktop_Qt_5_9_1_GCC_64bit-Release/
+*.user
+RollingEDT/build-RollingEDT-Desktop_Qt_5_9_1_GCC_64bit-Profile/
+RollingEDT/build-RollingEDT-Desktop_Qt_5_6_2_GCC_64bit-Debug/
+build-RollingEDT-Desktop_Qt_5_9_1_GCC_64bit-Debug/
+build-RollingEDT-Desktop_Qt_5_9_1_GCC_64bit-Release/

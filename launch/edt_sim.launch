@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+
+<arg name="vehicle" default="iris_0"/>
+
+<group ns="$(arg vehicle)">
+<node pkg="GIE" type="GIE_node" name="GIE" output="screen">
+<remap from="camera_info" to ="kinect_ir/depth/camera_info"/>
+<remap from="depth_image" to ="kinect_ir/kinect/depth/image_raw"/>
+<remap from="odom" to ="mavros/local_position/odom"/>
+</node>
+</group>
+
+<node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0 map world 100" />
+</launch>

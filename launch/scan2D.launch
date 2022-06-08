@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+    <param name="use_sim_time" value="true"/>
+    <param name="data_case" value="laser2D"/>
+    <node pkg="GIE" type="GIE_node" name="GIE_mapping" output="screen">
+        <rosparam command="load" file="$(find GIE)/cfg/scan2D_params.yaml"/>
+
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0 map world 100"/>
+    <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find GIE)/cfg/scan2d.rviz"/>
+</launch>

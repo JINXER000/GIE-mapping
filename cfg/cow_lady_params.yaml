@@ -1,0 +1,29 @@
+display_loc_edt: false
+display_occ: false
+display_glb_edt: true
+display_glb_ogm: true
+vis_interval: 1
+vis_height: 1
+
+log_dir: "/home/joseph/GIE_log.csv"
+
+occupancy_threshold: 180
+
+voxel_width: 0.05
+
+local_size_x: 10
+local_size_y: 10
+local_size_z: 3
+
+ogm:
+  min_height: -10
+  max_height: 10
+
+wave:
+  cutoff_dist: 6
+
+# params of hash table
+hash:
+  bucket_max: 10000
+
+  block_max: 11997

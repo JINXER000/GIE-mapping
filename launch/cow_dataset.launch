@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+<param name="use_sim_time" value="true"/>
+<param name="data_case" value="cow_lady"/>
+<node pkg="GIE" type="GIE_node" name="GIE_mapping" output="screen">
+<rosparam command="load" file="$(find GIE)/cfg/cow_lady_params.yaml" />
+</node>
+
+<node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0 map world 100" />
+ <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find GIE)/cfg/cow_lady.rviz" />
+</launch>
