@@ -13,10 +13,10 @@ Extensive experiments have been carried out with different robots and range sens
 performance with limited onboard computational resources.
 
 <p align="center">
-  <img src="figure/uav-2dlidar.gif" width = "480" height = "270"/>
-  <img src="figure/uav-depth.gif" width = "480" height = "270"/>
-  <img src="figure/uav-laser3d.gif" width = "480" height = "270"/>
-  <img src="figure/ugv_laser3d.gif" width = "480" height = "270"/>
+  <img src="figure/uav-2dlidar.gif" width = "400" height = "225"/>
+  <img src="figure/uav-depth.gif" width = "400" height = "225"/>
+  <img src="figure/uav-laser3d.gif" width = "400" height = "225"/>
+  <img src="figure/ugv_laser3d.gif" width = "400" height = "225"/>
 </p>
 
 
@@ -88,10 +88,15 @@ cd ..
 catkin_make
 source devel/setup.bash
 ```
-Before launching any examples, please revise the *log_dir* parameter in the corresponding .yaml file
-to your own directory, otherwise an error will be thrown. 
+
 
 ## Launch the mapper
+### Caution
+- Before launching any examples, please revise the *log_dir* parameter in the corresponding .yaml file
+to your own directory, otherwise an error will be thrown. 
+- If the local size is too large, an "invalid argument" error will be thrown due to CUDA does not support such a large thread-block.
+- The parameters *bucket_max* and *block_max* has to be increased if you are doing large-scale and fine-resolution mapping. The initialization time may be longer. 
+
 ## Try with datasets
 ### UGV-corridor
 Please download the dataset [here](https://drive.google.com/file/d/1COHl_jEaWHl09kPolfXgYs66_YTrb3uH/view?usp=sharing).
@@ -101,7 +106,7 @@ roslaunch GIE ugv_dataset.launch
 rosbag play ugv-cut-filter.bag --clock __name:=profile_bag
 ```
 
-### cow-lady
+### Cow-lady
 Please download the dataset [here](http://robotics.ethz.ch/~asl-datasets/iros_2017_voxblox/data.bag).
 ```bash
 roslaunch GIE cow_dataset.launch
@@ -159,10 +164,6 @@ If you are using a  CPU-based planner, the voxel block ID can be retrieved like 
 ```
 And voxels inside the block can be visited.
 
-### Caution
-- If the local size is too large, an "invalid argument" error will be thrown due to CUDA does not support such a large thread-block.
-
-- The parameters *bucket_max* and *block_max* has to be increased if you are doing large-scale and fine-resolution mapping. The initialization time may be longer. 
 # Additional features
 ### Frontiers for exploration
 The system extracts low-level frontiers for exploration. The data type of **VOXTYPE_FNT** denotes the voxel that belongs to the low-level frontier. You may need to do some post-process to filter out the noise. 
