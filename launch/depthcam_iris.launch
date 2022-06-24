@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <launch>
-    <param name="use_sim_time" value="false"/>
+    <param name="use_sim_time" value="true"/>
     <param name="data_case" value="depth_cam"/>
     <group ns="iris_0">
         <node pkg="GIE" type="GIE_node" name="GIE_mapping" output="screen">

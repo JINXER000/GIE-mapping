@@ -39,13 +39,10 @@ void RealsenseMapMaker::initialize(const sensor_msgs::CameraInfo::ConstPtr& msg,
 }
 
 
-
-
 void RealsenseMapMaker::setLocMap(LocMap *lMap)
 {
     _lMap = lMap;
 }
-
 void RealsenseMapMaker::updateLocalOGM(const Projection& proj,const sensor_msgs::Image::ConstPtr &dep_img,
                                        int3* VB_keys_loc_D, const int time,  bool for_motion_planner, int rbt_r2_grids)
 {

@@ -18,7 +18,7 @@ public:
 
     void setLocMap(LocMap *lMap);
     void updateLocalOGM(const Projection& proj,const sensor_msgs::LaserScan::ConstPtr &scan,
-                                        int3* VB_keys_loc_D, const int time,  bool for_motion_planner, int rbt_r2_grids);
+                        int3* VB_keys_loc_D, const int time,  bool for_motion_planner, int rbt_r2_grids);
 
 private:
     ScanParam _scan_param;

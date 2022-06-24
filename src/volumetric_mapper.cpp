@@ -1,3 +1,5 @@
+
+
 #include "volumetric_mapper.h"
 VOLMAPNODE::VOLMAPNODE()
 {
@@ -8,7 +10,7 @@ VOLMAPNODE::VOLMAPNODE()
     edt_msg_pub = _nh.advertise<GIE::CostMap> ("cost_map", 1);
 
     // Subscriber
-    if(param.data_case == "ugv_corridor" || param.data_case == "laser3D")
+    if(param.data_case == "ugv_corridor" )
     {
         s_odom_sub.subscribe(_nh,"/LaserOdomTopic", 1);
         s_pntcld_sub.subscribe(_nh,"/rslidar_points", 1);
@@ -39,6 +41,13 @@ VOLMAPNODE::VOLMAPNODE()
         laser2D_sync = new message_filters::Synchronizer<laser2D_sync_policy> (laser2D_sync_policy(30), s_laser_sub, s_odom_sub);
         laser2D_sync->setMaxIntervalDuration(ros::Duration(0.1));
         laser2D_sync->registerCallback(boost::bind(&VOLMAPNODE::CB_scan_odom,this,_1,_2));
+    }else if(param.data_case == "laser3D")
+    {
+        s_odom_sub.subscribe(_nh,"/ground_truth/state", 1);
+        s_pntcld_sub.subscribe(_nh,"/velodyne_points", 1);
+        pntcld_sync = new message_filters::Synchronizer<pntcld_sync_policy> (pntcld_sync_policy(30), s_pntcld_sub, s_odom_sub);
+        pntcld_sync->setMaxIntervalDuration(ros::Duration(0.1));
+        pntcld_sync->registerCallback(boost::bind(&VOLMAPNODE::CB_pntcld_odom,this,_1,_2));
     }
 
 
@@ -51,20 +60,18 @@ VOLMAPNODE::VOLMAPNODE()
 
     int3 local_grids = make_int3(param.local_size_x/param.voxel_width, param.local_size_y/param.voxel_width, param.local_size_z/param.voxel_width);
 
-
     // setup local map
     _loc_map = new LocMap(param.voxel_width, local_grids, param.occupancy_threshold, param.ogm_min_h, param.ogm_max_h, param.cutoff_grids_sq);
     _pnt_map_maker.setLocMap(_loc_map);
     _rea_map_maker.setLocMap(_loc_map);
     _hok_map_maker.setLocMap(_loc_map);
+    _vlp_map_maker.setLocMap(_loc_map);
     _loc_map->create_gpu_map();
     setupRotationPlan();
-    
     // Setup glb EDT map
-    _hash_map = new GlbHashMap(_loc_map->_bdr_num,_loc_map->_update_size, param.max_bucket, param.max_block);
+    _hash_map = new GlbHashMap(_loc_map->_bdr_num,_loc_map->_local_size, param.max_bucket, param.max_block);
     _hash_map->setLocMap(_loc_map);
 
-    // for display
     if (param.display_occ)
     {
         _occ_rviz_pub = _nh.advertise<PntCldI>("occ_map",1);
@@ -93,14 +100,18 @@ VOLMAPNODE::VOLMAPNODE()
         _glb_ogm_pnt_cld->header.frame_id = "/map";
     }
 
+    _dbg_rviz_pub =  _nh.advertise<PntCldI>("dbg_pt", 1);
+    _dbg_pnt_cld = PntCldI ::Ptr(new PntCldI);
+    _dbg_pnt_cld->header.frame_id = "/map";
 
     if(param.for_motion_planner)
         setupEDTmsg4Motion(cost_map_msg, _loc_map, true);
 
-    // logger
+    // profile
     logger = new csvfile(param.log_dir);
-    (*logger)<<"Occupancy time"<<"EDT time";
+    (*logger)<<"Occupancy time"<<"EDT time"<< "RMSE";
 
+    gtc = new Gnd_truth_checker();
 
     // Timer
     _mapTimer = _nh.createTimer(ros::Duration(0.5), &VOLMAPNODE::publishMap, this);
@@ -119,14 +130,12 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
         return;
 
     _time++;
-
-
     tf::Transform trans = odom2trans();
     Projection proj = trans2proj(trans);
 
-    if (param.data_case == "ugv_corridor")
+    if (param.ugv_height >0)
     {
-        proj.origin.z = 1;
+        proj.origin.z = param.ugv_height;
     }
 
     if(mtx.try_lock() == false)
@@ -134,10 +143,9 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
         printf("!!!Please decrease frequency!!!\n");
         assert(false);
     }
-
-    // construct OGM
     auto start = std::chrono::steady_clock::now();
     _loc_map->calculate_pivot_origin(proj.origin);
+    _loc_map->calculate_update_pivot(proj.origin);
     if (_msg_mgr.got_dep_img)
     {
         _rea_map_maker.updateLocalOGM(proj, _depth_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time,
@@ -150,18 +158,24 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
     }
     else if(_msg_mgr.got_pnt_cld)
     {
-        _pnt_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time);
+        if(param.data_case == "laser3D")
+        {
+            _vlp_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time,
+                                          param.for_motion_planner, param.robot_r2_grids);
+        }else
+        {
+            _pnt_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time);
+        }
     }
 
-    _hash_map->updateHashOGM(_msg_mgr.got_pnt_cld, _time,param.display_glb_ogm && !param.display_glb_edt);
+    _hash_map->updateHashOGM(_msg_mgr.got_pnt_cld  && param.data_case != "laser3D", _time,param.display_glb_ogm && !param.display_glb_edt);
 
 
-    GPU_DEV_SYNC(); // only for profiling, can be deleted for faster speed
+    GPU_DEV_SYNC(); // only for profiling
     auto end= std::chrono::steady_clock::now();
     auto ogm_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     (*logger)<<endrow<<(float)ogm_duration;
 
-    // construct global EDT 
     start = std::chrono::steady_clock::now();
 
     EDT_OCC::batchEDTUpdate(_loc_map, _rotation_plan, _time);
@@ -177,7 +191,6 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
 
     mtx.unlock();
 
-    // publish cost map msg
     if(param.for_motion_planner)
     {
         _loc_map->convertCostMap();
@@ -209,6 +222,7 @@ tf::Transform VOLMAPNODE::odom2trans()  {
                                 _odom_ptr->pose.pose.position.y,
                                 _odom_ptr->pose.pose.position.z));
 
+    br.sendTransform(tf::StampedTransform(trans, cur_stamp, "map", "laser0"));
     if (param.data_case == "cow_lady")
     {
         // transform correction
@@ -294,11 +308,22 @@ void VOLMAPNODE::CB_scan2D(const sensor_msgs::LaserScan::ConstPtr& msg)
 //---
 void VOLMAPNODE::CB_pntcld(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
-    if(!_pnt_map_maker.is_initialized())
+    if(param.data_case=="laser3D")
     {
-        _pnt_map_maker.initialize(msg);
+        if(!_vlp_map_maker.is_initialized())
+        {
+            MulScanParam mp(440,16,10.0f, 2.0 * M_PI/440, -M_PI, 2.0f/180.0f *M_PI, -15.0f/180.0f*M_PI);
+            _vlp_map_maker.initialize(mp);
+        }
+    }else
+    {
+        if(!_pnt_map_maker.is_initialized())
+        {
+            _pnt_map_maker.initialize(msg);
+        }
     }
 
+    cur_stamp = msg->header.stamp;
     *_pntcld_ptr = *msg;
     _msg_mgr.got_pnt_cld = true;
 
@@ -307,10 +332,10 @@ void VOLMAPNODE::CB_pntcld(const sensor_msgs::PointCloud2::ConstPtr& msg)
 void VOLMAPNODE::setupRotationPlan()
 {
     // Setup the cutt rotations
-    if (_loc_map->_update_size.z == 1)
+    if (_loc_map->_local_size.z == 1)
     {
-        int Dx = _loc_map->_update_size.x;
-        int Dy = _loc_map->_update_size.y;
+        int Dx = _loc_map->_local_size.x;
+        int Dy = _loc_map->_local_size.y;
         int dimension_0[2] = {Dx,Dy};
         int permutation_0[2] = {1,0};
         int dimension_1[2] = {Dy,Dx};
@@ -320,9 +345,9 @@ void VOLMAPNODE::setupRotationPlan()
     }
     else
     {
-        int Dx = _loc_map->_update_size.x;
-        int Dy = _loc_map->_update_size.y;
-        int Dz = _loc_map->_update_size.z;
+        int Dx = _loc_map->_local_size.x;
+        int Dy = _loc_map->_local_size.y;
+        int Dz = _loc_map->_local_size.z;
         int dimension_0[3] = {Dx,Dy,Dz};
         int permutation_0[3] = {1,0,2};
         int dimension_1[3] = {Dy,Dx,Dz};
@@ -343,9 +368,9 @@ void VOLMAPNODE::setupEDTmsg4Motion(GIE::CostMap &msg, LocMap* loc_map, bool res
 
     if(resize)
     {
-        msg.x_size = loc_map->_update_size.x;
-        msg.y_size = loc_map->_update_size.y;
-        msg.z_size = loc_map->_update_size.z;
+        msg.x_size = loc_map->_local_size.x;
+        msg.y_size = loc_map->_local_size.y;
+        msg.z_size = loc_map->_local_size.z;
         msg.payload8.resize(sizeof(SeenDist)*static_cast<unsigned int>(msg.x_size*msg.y_size*msg.z_size));
     }
     msg.type = GIE::CostMap::TYPE_EDT;

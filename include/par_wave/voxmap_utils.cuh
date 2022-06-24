@@ -10,17 +10,10 @@
 #define VB_WIDTH 8
 #define VB_SIZE 512
 
-
-
-#define NUM_SM 10 //the number of Streaming Multiprocessors; 15 for Fermi architecture 30 for G280 at the moment of this document
 #define NUM_BIN 8 //the number of duplicated frontiers used in BFS_kernel_multi_blk_inGPU
 #define EXP 3 // EXP = log(NUM_BIN), assuming NUM_BIN is still power of 2 in the future architecture
 # define EXPSQ 6
-//using EXP and shifting can speed up division operation
 #define MOD_OP 7 // This variable is also related with NUM_BIN; may change in the future architecture;
-//using MOD_OP and "bitwise and" can speed up mod operation
-#define INF 2147483647//2^31-1
-#define UP_LIMIT 16677216//2^24
 #define WHITE 16677217
 #define GRAY0 16677219
 #define GRAY1 16677220
@@ -31,13 +24,13 @@
 
 #define RAISE_OUT 0
 #define LOWER_OUT 1
+#define LOWER_IN 3
 
-struct   GlbVoxel {// 1+1+12+12 =26
-
+struct   GlbVoxel {// 1+1+4+12 +4+4  +8 =34 bytes
     unsigned char occ_val = 0;
     char vox_type =  VOXTYPE_UNKNOWN;
     // time of being updated (mapping cycle)
-    unsigned short update_ct = 0;
+    int update_ct = 0;
 
     // the closest obstacle coordinate in glb map
     int3 coc_glb = EMPTY_KEY;
@@ -45,6 +38,9 @@ struct   GlbVoxel {// 1+1+12+12 =26
     int dist_sq = EMPTY_VALUE;
     // in one mapping cycle, the step indicator of propagation
     int wave_layer = -1;
+
+    // for atomic
+    Dist_id dist_id_pair;
 };
 
 struct VoxelBlock {
@@ -59,7 +55,6 @@ struct CrdLessThan
                 (a.y < b.y) || (a.y == b.y && (
                         (a.z < b.z)))));
     }
-
 };
 
 struct CrdEqualTo
@@ -143,7 +138,7 @@ unsigned int get_squred_dist(const int3 &c1,const int3 &c2)
 {
     int3 diff =c1-c2;
     unsigned int ret = diff.x*diff.x + diff.y*diff.y + diff.z*diff.z;
-    if(ret>900000)
+    if(ret>900000 )
     {
         assert(false);
     }
@@ -204,15 +199,4 @@ void set_hashvoxel_occ_val(GlbVoxel* glb_vox, float val, float low_pass_param, u
         glb_vox->vox_type = VOXTYPE_FREE;
 }
 
-__device__ __forceinline__
-bool dist_coc_inconsistent(int dist, int3 coc)
-{
-    bool coc_invalid = invalid_coc_glb(coc);
-    bool dist_ok = dist < 3000;
-    if(coc_invalid && dist_ok)
-    {
-        printf("debug here");
-    }
-    return (coc_invalid && dist_ok);
-}
 #endif

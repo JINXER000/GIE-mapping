@@ -1,3 +1,4 @@
+
 #ifndef SRC_VOLUMETRIC_MAPPER_H
 #define SRC_VOLUMETRIC_MAPPER_H
 
@@ -7,6 +8,7 @@
 #include "cuda_toolkit/occupancy/realsense/realsense_map_maker.h"
 #include "cuda_toolkit/occupancy/hokuyo/hokuyo_map_maker.h"
 #include "cuda_toolkit/occupancy/point_cloud/pntcld_map_maker.h"
+#include "cuda_toolkit/occupancy/vlp16/vlp16_map_maker.h"
 #include "cuda_toolkit/edt/edt_interfaces.h"
 #include <sensor_msgs/CameraInfo.h>
 #include <nav_msgs/Odometry.h>
@@ -24,7 +26,9 @@
 #include "std_srvs/SetBool.h"
 #include <mutex>
 #include "simple_logger.h"
+#include "gt_checker.h"
 #include "map_structure/local_batch.h"
+#include <tf/transform_broadcaster.h>
 
 class VOLMAPNODE
 {
@@ -70,6 +74,7 @@ private:
     ros::NodeHandle _nh;
     ros::Subscriber _caminfo_sub;
 
+
     message_filters::Subscriber<nav_msgs::Odometry> s_odom_sub;
     message_filters::Subscriber<geometry_msgs::TransformStamped> s_trfm_sub;
     message_filters::Subscriber<sensor_msgs::PointCloud2> s_pntcld_sub;
@@ -100,12 +105,14 @@ private:
     HokuyoMapMaker _hok_map_maker;
     RealsenseMapMaker _rea_map_maker;
     PntcldMapMaker _pnt_map_maker;
+    Vlp16MapMaker _vlp_map_maker;
 
     // Pointer to store the laser & pose
     boost::shared_ptr<sensor_msgs::LaserScan> _laser_ptr;
     boost::shared_ptr<nav_msgs::Odometry>  _odom_ptr;
     boost::shared_ptr<sensor_msgs::Image> _depth_ptr;
     boost::shared_ptr<sensor_msgs::PointCloud2> _pntcld_ptr;
+
 
     // glb EDT
     GlbHashMap *_hash_map;
@@ -120,15 +127,16 @@ private:
     int _time;
     MsgMgr _msg_mgr;
 
-
     PntCldI::Ptr _occ_pnt_cld;
     PntCldI::Ptr _edt_pnt_cld;
     PntCldI::Ptr _glb_edt_pnt_cld;
     PntCld::Ptr _glb_ogm_pnt_cld;
+    PntCldI::Ptr _dbg_pnt_cld;
     ros::Publisher  _edt_rviz_pub;
     ros::Publisher  _occ_rviz_pub;
     ros::Publisher _glb_edt_rviz_pub;
     ros::Publisher _glb_ogm_rviz_pub;
+    ros::Publisher _dbg_rviz_pub;
 
     // input from ros
     Parameters param;
@@ -138,6 +146,11 @@ private:
 
     // profiler
     csvfile *logger;
+    Gnd_truth_checker *gtc;
+
+    // for tf pub
+    tf::TransformBroadcaster br;
+    ros::Time cur_stamp;
 
     void publish_local_ptcld_2_rviz()
     {
@@ -149,11 +162,11 @@ private:
         int3 crd;
         float3 pos;
         int idx;
-        for (crd.x=0;crd.x<_loc_map->_update_size.x;crd.x++)
+        for (crd.x=0;crd.x<_loc_map->_local_size.x;crd.x++)
         {
-            for (crd.y=0;crd.y<_loc_map->_update_size.y;crd.y++)
+            for (crd.y=0;crd.y<_loc_map->_local_size.y;crd.y++)
             {
-                for (crd.z=0;crd.z<_loc_map->_update_size.z;crd.z++)
+                for (crd.z=0;crd.z<_loc_map->_local_size.z;crd.z++)
                 {
                     idx = _loc_map->id(crd.x,crd.y,crd.z);
                     if (_loc_map->glb_type_H[idx]==VOXTYPE_UNKNOWN)
@@ -195,6 +208,10 @@ private:
 
         if(param.display_loc_edt)
         {
+            if(param.profile_loc_rms)
+            {
+                gtc->cpy_edt_cld(_edt_pnt_cld);
+            }
             pcl_conversions::toPCL(ros::Time::now(), _edt_pnt_cld->header.stamp);
             _edt_rviz_pub.publish (_edt_pnt_cld);
             _edt_pnt_cld->clear();
@@ -232,6 +249,7 @@ private:
 
                 if(param.display_glb_edt)
                 {
+                    if(!param.profile_glb_rms)
                     {
                         if(vox_crd.z != uav_coord_z)
                             continue;
@@ -253,7 +271,10 @@ private:
         }
         if(param.display_glb_ogm)
         {
-
+            if(param.profile_loc_rms || param.profile_glb_rms)
+            {
+                gtc->cpy_occu_cld(_glb_ogm_pnt_cld);
+            }
             pcl_conversions::toPCL(ros::Time::now(), _glb_ogm_pnt_cld->header.stamp);
             _glb_ogm_rviz_pub.publish(_glb_ogm_pnt_cld);
             _glb_ogm_pnt_cld->clear();
@@ -261,14 +282,28 @@ private:
 
         if(param.display_glb_edt)
         {
+            if(param.profile_glb_rms)
+            {
+                gtc->cpy_edt_cld(_glb_edt_pnt_cld);
+            }
             pcl_conversions::toPCL(ros::Time::now(), _glb_edt_pnt_cld->header.stamp);
             _glb_edt_rviz_pub.publish(_glb_edt_pnt_cld);
             _glb_edt_pnt_cld->clear();
         }
     }
 
+
     void visualize(float3 uav_pos)
     {
+        if(param.profile_glb_rms || param.profile_loc_rms)
+        {
+            //pause rosbag
+            std_srvs::SetBool pausesrv;
+            pausesrv.request.data = true;
+            pausesrv.response.message ="rosbag paused!";
+            ros::service::call("/profile_bag/pause_playback",pausesrv);
+            _mapTimer.stop();
+        }
 
         if(param.display_occ || param.display_loc_edt)
         {
@@ -277,13 +312,23 @@ private:
 
         if(param.display_glb_edt || param.display_glb_ogm)
         {
-            // todo: 2d lidar height
             uav_pos.z = param.vis_height;
             int3 uav_coord = _loc_map->pos2coord(uav_pos);
             publish_glb_2_rviz(uav_coord.z);
         }
 
+        if(param.profile_glb_rms || param.profile_loc_rms)
+        {
+            float rmse = gtc->cmp_dist();
+            (*logger)<<rmse;
 
+            //resume rosbag
+            std_srvs::SetBool resumesrv;
+            resumesrv.request.data = false;
+            resumesrv.response.message ="rosbag resume!";
+            ros::service::call("/profile_bag/pause_playback",resumesrv);
+            _mapTimer.start();
+        }
     }
 };
 

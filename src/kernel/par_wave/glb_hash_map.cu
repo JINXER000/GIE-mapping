@@ -1,8 +1,10 @@
-include "unify_helper.cuh"
+
+
+#include "unify_helper.cuh"
 #include "alloc_helper.cuh"
 #include "wave_helper.h"
-#include "par_wave/glb_hash_map.h"
 #include "vox_hash/memspace.h"
+#include "par_wave/glb_hash_map.h"
 
 GlbHashMap::GlbHashMap(int bdr_size, int3 loc_dim, int bucket_max, int block_max)
 {
@@ -26,11 +28,14 @@ GlbHashMap::GlbHashMap(int bdr_size, int3 loc_dim, int bucket_max, int block_max
 
     frontierA.resize(bdr_size);
     frontierB.resize(bdr_size);
+    frontierC.resize(bdr_size);
     thrust::fill(frontierA.begin(),frontierA.end(),EMPTY_KEY);
     thrust::fill(frontierB.begin(),frontierB.end(),EMPTY_KEY);
+    thrust::fill(frontierC.begin(),frontierC.end(),EMPTY_KEY);
 
-    waveA = new waveWrapper<int3>(loc_volume_size, RAISE_OUT);
-    waveB = new waveWrapper<int3>(loc_volume_size, LOWER_OUT);
+    waveA = new waveWrapper<int3>(bdr_size, RAISE_OUT);
+    waveB = new waveWrapper<int3>(bdr_size, LOWER_OUT);
+    waveC = new waveWrapper<int3>(bdr_size, LOWER_IN);
 
     // cannot init at the beginning
     hash_table_D= new D_HASH_TB(bucket_max, 2, block_max, EMPTY_KEY);
@@ -76,25 +81,37 @@ void GlbHashMap::allocHashTB()
         int numBlocks = (numJobs + MAX_THREADS_PER_BLOCK - 1) / MAX_THREADS_PER_BLOCK;
         // copy all keys only at the first time
 
-
         thrust::device_ptr<int> d_link_head((hash_table_D)->alloc.link_head);
         int h_link_head = *d_link_head;
         printf("New blocks allocated: %d, unused blks: %d, used blks: %d\n", numJobs, h_link_head, VB_cnt_H);
+
         if (numJobs == 0)
             return;
 
-        int blk_start = (hash_table_D)->alloc.allocate_n(numJobs);
-        device_ptr<int> unsuccessful(&success_alloc_D[numJobs]);// last elem of success
+        if(h_link_head<=numJobs)
+        {
+            printf("Please increase hash table size!\n");
+            assert(false);
+        }
+        
+        int blk_start = (hash_table_D)->alloc.allocate_n(numJobs);// 19995
 
+        device_ptr<int> unsuccessful(&success_alloc_D[numJobs]);// last elem of success
 
 
         *unsuccessful = 0;
         TryAllocateKernel<<<numBlocks, MAX_THREADS_PER_BLOCK>>>
                 (*(hash_table_D),
                  raw_pointer_cast(&require_alloc_keys_D[0]),
-                 raw_pointer_cast(unsuccessful),
+                 raw_pointer_cast(&success_alloc_D[0]),
                  blk_start,
                  numJobs);
+
+
+        ReturnAllocations<<<numBlocks, MAX_THREADS_PER_BLOCK>>>
+                (*(hash_table_D),
+                 raw_pointer_cast(&success_alloc_D[0]),
+                 raw_pointer_cast(&unsuccessful[0]), numJobs);
 
 
         all_successful = !((int)*unsuccessful);
@@ -105,8 +122,8 @@ void GlbHashMap::allocHashTB()
 void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream_glb_ogm)
 {
     allocHashTB();
-    const int gridSize = _lMap->_update_size.z;
-    const int blkSize = _lMap->_update_size.y;
+    const int gridSize = _lMap->_local_size.z;
+    const int blkSize = _lMap->_local_size.y;
     if(input_pyntcld)
     {
         updateHashOGMWithPntCld<<<gridSize,blkSize>>>(*_lMap, *hash_table_D, map_ct,stream_glb_ogm,
@@ -123,18 +140,21 @@ void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream
 }
 
 
-
 void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
 {
-    batchEDTUnify<<<_lMap->_update_size.z, _lMap->_update_size.x>>>(*_lMap, *hash_table_D,
-                                                                    raw_pointer_cast(&frontierA[0]),
-                                                                    raw_pointer_cast(&frontierB[0]),
-                                                                    num_dirs_6, dirs_6_D,
-                                                                    map_ct,
-                                                                    display_glb_edt,
-                                                                  raw_pointer_cast(&stream_VB_keys_D[0]),
-                                                                  raw_pointer_cast(&changed_cnt[0]));
 
+    MarkLimitedObserve<<<_lMap->_local_size.z, _lMap->_local_size.x>>>(*_lMap, *hash_table_D, display_glb_edt,
+                                                                                  raw_pointer_cast(&stream_VB_keys_D[0]),
+                                                                                  raw_pointer_cast(&changed_cnt[0]));
+
+    waveC->f_num_shared[0] = 0;
+    obtainFrontiers<<<_lMap->_local_size.z, _lMap->_local_size.x>>>(*_lMap, *hash_table_D,
+                                                                                  raw_pointer_cast(&frontierA[0]),
+                                                                                  raw_pointer_cast(&frontierB[0]),
+                                                                                  raw_pointer_cast(&frontierC[0]),
+                                                                                  raw_pointer_cast(&(waveC->f_num_shared[0])),
+                                                                                  num_dirs_6, dirs_6_D,
+                                                                                  map_ct);
 
     thrust::sort(frontierA.begin(), frontierA.end(), CrdLessThan());
     auto last_it_A = thrust::unique(frontierA.begin(), frontierA.end(), CrdEqualTo());
@@ -143,7 +163,8 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
     thrust::sort(frontierB.begin(), frontierB.end(), CrdLessThan());
     auto last_it_B = thrust::unique(frontierB.begin(), frontierB.end(), CrdEqualTo());
     fB_num_raw = thrust::distance(frontierB.begin(), last_it_B);
-    std::cout<<"raise  "<<fA_num_raw<<" elems, lower out "<<fB_num_raw<<std::endl;
+
+    fC_num_raw = waveC->f_num_shared[0];
 
     waveA->f_num_shared[0] = fA_num_raw;
     waveA->aux_num_shared[0] = fB_num_raw;
@@ -155,12 +176,26 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
     fB_num_raw = waveA->aux_num_shared[0];
 
     waveB->f_num_shared[0] = fB_num_raw;
-    waveB->aux_num_shared[0] = -99; // dummy
-    parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierB[0]),
+    waveB->aux_num_shared[0] = fC_num_raw;
+    parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierC[0]),
                     num_dirs_6, dirs_6_D, map_ct,
                     _lMap, *waveB, hash_table_D,
                     display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
     thrust::fill(frontierB.begin(),frontierB.end(),EMPTY_KEY);
+    fC_num_raw = waveB->aux_num_shared[0];
+
+
+    waveC->f_num_shared[0] = fC_num_raw;
+    parWave<LocMap>(raw_pointer_cast(&frontierC[0]), raw_pointer_cast(&frontierA[0]),
+                    num_dirs_6, dirs_6_D, map_ct,
+                    _lMap, *waveC, hash_table_D,
+                    display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
+    thrust::fill(frontierC.begin(),frontierC.end(),EMPTY_KEY);
+
+    UpdateHashBatch<<<_lMap->_local_size.z, _lMap->_local_size.x>>>(*_lMap, *hash_table_D, display_glb_edt,
+                                                                       raw_pointer_cast(&stream_VB_keys_D[0]),
+                                                                      raw_pointer_cast(&changed_cnt[0]));
+
 }
 
 void GlbHashMap::streamD2H(int changed_cnt_condense)

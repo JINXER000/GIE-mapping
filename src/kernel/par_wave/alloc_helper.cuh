@@ -27,11 +27,11 @@ namespace vhashing {
  * in success.
  *
  * */
-    __global__ __forceinline__
+    __global__
     void TryAllocateKernel(
-            HASH_BASE hashBase,
+            HASH_BASE hash_base,
             int3 *keys,
-            int *unsuccessful,
+            int *success,
             int blockBase,
             int numJobs
     ) {
@@ -40,13 +40,13 @@ namespace vhashing {
         if (idx_1d >= numJobs)
             return;
 
-
-        int alloc_id = hashBase.insert_to_id(keys[idx_1d], blockBase + idx_1d);
+        int alloc_id = hash_base.insert_to_id(keys[idx_1d], blockBase + idx_1d);
         if(alloc_id == -1)
         {
-            int offset_free = hashBase.alloc.offsets[blockBase + idx_1d];
-            hashBase.alloc.free(offset_free);
-            *unsuccessful = 1;
+            success[idx_1d] = hash_base.alloc.offsets[blockBase + idx_1d];
+        }else
+        {
+            success[idx_1d] = -1;
         }
     }
 
@@ -55,7 +55,7 @@ namespace vhashing {
  * then for each of these keys, free the allocated block,
  * and record which keys failed.
  * */
-    __global__ __forceinline__
+    __global__
     void ReturnAllocations(
             HASH_BASE self,
             int *success,

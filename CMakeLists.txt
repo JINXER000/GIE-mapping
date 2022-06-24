@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(GIE)
-#set(ROS_BUILD_TYPE Debug)
-#set(CMAKE_BUILD_TYPE Debug)
 
 # Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -16,7 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
     nav_msgs
     pcl_conversions
     pcl_ros
-        tf_conversions
+    tf_conversions
     )
 
 FIND_PACKAGE(CUDA REQUIRED)
@@ -85,7 +83,9 @@ cuda_add_executable(
     src/pntcld_map_maker.cpp
     src/kernel/par_wave/glb_hash_map.cu
     src/volumetric_mapper.cpp
-    src/kernel/edt/local_edt.cu)
+    src/kernel/edt/local_edt.cu src/vlp16_map_maker.cpp
+    src/kernel/vlp16/vlp16_fast.cu
+)
 
 add_dependencies(
     ${PROJECT_NAME}_node
@@ -99,7 +99,5 @@ target_link_libraries(
         ${catkin_LIBRARIES}
         ${CUDA_LIBRARIES}
 )
-
 target_link_libraries(${PROJECT_NAME}_node cutt cudadevrt)
-
 

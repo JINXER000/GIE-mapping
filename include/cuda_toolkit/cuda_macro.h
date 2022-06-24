@@ -12,8 +12,10 @@
 #define PNT_TYPE float3
 #define REALSENSE_DEPTH_TPYE float
 #define SCAN_DEPTH_TPYE float
+#define LASER_RANGE_TPYE float
 #define SENS_FAR_DIST 1000.f
 #define GPU_PI_FLOAT 3.1415926f
+
 
 #define checkCudaErrors(val) check( (val), #val, __FILE__, __LINE__)
 
@@ -36,16 +38,5 @@ void check(T err, const char* const func, const char* const file, const int line
 #define GPU_DEV_SYNC() checkCudaErrors(cudaDeviceSynchronize())
 
 
-__forceinline__
-void checkCUErr()
-{
-    cudaError_t err = cudaGetLastError();        // Get error code
 
-    if ( err != cudaSuccess )
-    {
-        printf("CUDA Error: %s\n", cudaGetErrorString(err));
-        exit(-1);
-    }
-
-}
 #endif // CUDA_MACRO_H

@@ -1,3 +1,5 @@
+
+
 #ifndef SRC_VHASHING_H
 #define SRC_VHASHING_H
 
@@ -187,7 +189,6 @@ namespace vhashing {
             // not found and no more links to visit
             return end();
         }
-
 
 
 
@@ -549,6 +550,7 @@ namespace vhashing {
             offsets_shared[num_blocks] = 0;
 
             this->alloc.link_head = (int*)raw_pointer_cast(&offsets_shared[num_blocks + 1]);
+
             offsets_shared[num_blocks + 1] = num_blocks - 1;
         }
 
@@ -571,6 +573,7 @@ namespace vhashing {
 
             this->alloc.mutex = raw_pointer_cast(&offsets_shared[other.alloc.num_elems]);
             this->alloc.link_head = raw_pointer_cast(&offsets_shared[other.alloc.num_elems + 1]);
+
         }
 
         /* move constructor -- just use default */
@@ -618,6 +621,8 @@ namespace vhashing {
 
             this->alloc.mutex = raw_pointer_cast(&offsets_shared[other.alloc.num_elems]);
             this->alloc.link_head = raw_pointer_cast(&offsets_shared[other.alloc.num_elems + 1]);
+
+
         }
 
     };

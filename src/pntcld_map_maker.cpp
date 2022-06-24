@@ -60,8 +60,6 @@ void PntcldMapMaker::pntcld_process(const sensor_msgs::PointCloud2ConstPtr& msg)
     }
 }
 
-
-
 void PntcldMapMaker::updateLocalOGM(const Projection& proj,const sensor_msgs::PointCloud2::ConstPtr &msg,
                                     int3* VB_keys_loc_D, const int time)
 {

@@ -5,6 +5,7 @@
 namespace REALSENSE_FAST
 {
 
+
 __global__
 void setLocalOccupancy(LocMap loc_map,
                       REALSENSE_DEPTH_TPYE *d_depth,
@@ -21,7 +22,7 @@ void setLocalOccupancy(LocMap loc_map,
     local_crd.z = blockIdx.x;
     local_crd.y = threadIdx.x;
 
-    for (local_crd.x = 0; local_crd.x < loc_map._update_size.x; ++local_crd.x)
+    for (local_crd.x = 0; local_crd.x < loc_map._local_size.x; ++local_crd.x)
     {
 
         int idx_1d=loc_map.coord2idx_local(local_crd);
@@ -53,7 +54,6 @@ void setLocalOccupancy(LocMap loc_map,
 
         float real_depth=d_depth[param.cols*pix.y+pix.x];
 
-        //  ignore ego volume range
         if (real_depth <= 0.21f)
         {
             VB_keys_loc_D[idx_1d] = EMPTY_KEY;
@@ -70,7 +70,6 @@ void setLocalOccupancy(LocMap loc_map,
                 VB_keys_loc_D[idx_1d] = EMPTY_KEY;
                 continue;
             }
-
         }
 
         if (idea_depth < real_depth - loc_map._voxel_width)
@@ -91,18 +90,15 @@ void setLocalOccupancy(LocMap loc_map,
         {
             VB_keys_loc_D[idx_1d] = EMPTY_KEY;
         }
-
-
     }
 }
-
 
 
 void localOGMKernels(LocMap* loc_map, REALSENSE_DEPTH_TPYE *detph_data, Projection proj, CamParam param,
                      int3* VB_keys_loc_D, bool for_motion_planner, int rbt_r2_grids)
 {
-    const int gridSize = loc_map->_update_size.z;
-    const int blkSize = loc_map->_update_size.y;
+    const int gridSize = loc_map->_local_size.z;
+    const int blkSize = loc_map->_local_size.y;
     setLocalOccupancy<<<gridSize,blkSize>>>(*loc_map, detph_data, proj,param,VB_keys_loc_D,
                                             for_motion_planner,rbt_r2_grids);
 }

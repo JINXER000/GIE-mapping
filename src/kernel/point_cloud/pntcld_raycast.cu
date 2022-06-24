@@ -1,11 +1,10 @@
 #include "pntcld_interfaces.h"
 #include <float.h>
 #include "ray_cast.h"
-#include "../../../include/par_wave/voxmap_utils.cuh"
+#include "par_wave/voxmap_utils.cuh"
 
 namespace PNTCLD_RAYCAST
 {
-
 
 __device__ __forceinline__
 bool clearRayLoc(LocMap &loc_map,const int3 &crd, const float &val1, const float &val2, const int &time)
@@ -27,7 +26,7 @@ void getAllocKeys(LocMap loc_map, int3* VB_keys_loc_D)
     loc_crd.z = blockIdx.x;
     loc_crd.y = threadIdx.x;
 
-    for (loc_crd.x = 0; loc_crd.x < loc_map._update_size.x; ++loc_crd.x)
+    for (loc_crd.x = 0; loc_crd.x < loc_map._local_size.x; ++loc_crd.x)
     {
         int idx_1d=loc_map.coord2idx_local(loc_crd);
 
@@ -35,7 +34,7 @@ void getAllocKeys(LocMap loc_map, int3* VB_keys_loc_D)
 
         if (count == 0)
         {
-            VB_keys_loc_D[idx_1d] = EMPTY_KEY; // vox type is unknonw
+            VB_keys_loc_D[idx_1d] = EMPTY_KEY; // vox type is unknown
         }else
         {
             if(count>0)
@@ -66,10 +65,9 @@ void freeLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj, int pnt_sz, in
     float3 glb_pos = proj.L2G*pnt_cld[id];
 
     float3 diff = glb_pos-proj.origin;
-    // todo: calculate max ray len
-    RAY::rayCastLoc(loc_map, proj.origin,  glb_pos, time, 0.707f*loc_map._update_size.x*loc_map._voxel_width, &clearRayLoc);
-}
 
+    RAY::rayCastLoc(loc_map, proj.origin,  glb_pos, time, 0.707f*loc_map._local_size.x*loc_map._voxel_width, &clearRayLoc);
+}
 
 
 __global__
@@ -94,9 +92,6 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
 }
 
 
-
-
-
 void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param, int3* VB_keys_loc_D, int time)
 {
     // Register the point coulds
@@ -105,8 +100,8 @@ void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldPa
     // Free the empty areas
     freeLocObs<<<param.valid_pnt_count/256+1, 256>>>(*loc_map,pnt_cld,proj,param.valid_pnt_count,time);
 
-    const int gridSize = loc_map->_update_size.z;
-    const int blkSize = loc_map->_update_size.y;
+    const int gridSize = loc_map->_local_size.z;
+    const int blkSize = loc_map->_local_size.y;
     getAllocKeys<<<gridSize,blkSize>>>(*loc_map,VB_keys_loc_D);
 }
 }

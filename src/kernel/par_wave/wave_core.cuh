@@ -1,9 +1,25 @@
 
+
 #ifndef SRC_WAVE_CORE_CUH
 #define SRC_WAVE_CORE_CUH
 
 #include "par_wave/frontier_wrapper.h"
 #include "par_wave/voxmap_utils.cuh"
+
+__device__ unsigned long long int id_atomicMin(unsigned long long int* address, int sq_dist_new, int loc_id_new)
+{
+    Dist_id new_pair, changing_pair, old_pair;
+    new_pair.sq_dist[0] = sq_dist_new;
+    new_pair.parent_loc_id[1] = loc_id_new;
+    changing_pair.ulong = *address;
+    old_pair.ulong = changing_pair.ulong;
+    while (changing_pair.sq_dist[0] >  sq_dist_new)
+    {
+        old_pair.ulong = changing_pair.ulong;
+        changing_pair.ulong = atomicCAS(address, changing_pair.ulong,  new_pair.ulong);
+    }
+    return old_pair.ulong;
+}
 
 // A group of local queues of node IDs, used by an entire thread block.
 // Multiple queues are used to reduce memory contention.
@@ -83,9 +99,10 @@ struct LocalQueues {
 };
 
 
+
 __device__  __forceinline__
 void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *overflow,
-                   LocMap &loc_map, HASH_BASE &hashBase, int3* q_aux, int* q_aux_num,
+                   LocMap &loc_map, HASH_BASE &hash_base, int3* q_aux, int* q_aux_num,
                    int num_dirs, const int3* dirs_D, int gray_shade, int map_ct,
                    bool display_glb_edt, int3* changed_keys, int* changed_cnt)
 {
@@ -93,15 +110,20 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
     if(invalid_src(cur_glb))
         return;
 
+
     int3 vb_key = get_VB_key(cur_glb);
-    int alloc_id = hashBase.get_alloc_blk_id(vb_key);
-    if(alloc_id== -1)
+    int alloc_id = hash_base.get_alloc_blk_id(vb_key);
+    if(alloc_id <0)
     {
         printf("voxel block not found\n");
+        int alloc_id = hash_base.get_alloc_blk_id(vb_key);
         assert(false);
     }
-    VoxelBlock* Vb= &(hashBase.alloc[alloc_id]);
+    VoxelBlock* Vb= &(hash_base.alloc[alloc_id]);
     GlbVoxel* cur_vox = retrive_vox_D(cur_glb, Vb);
+
+    if(cur_vox->dist_sq > loc_map._cutoff_grids_sq)
+        return;
 
     // streaming
     if(display_glb_edt)
@@ -113,10 +135,12 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
 
     bool cur_in_q = false;
     int3 valid_local_coc = cur_vox->coc_glb;
+    int3 cur_coc_wr = loc_map.glb2wave_range(valid_local_coc);  // must inside loc range
+
     for(int i=0; i<num_dirs; i++)
     {
         int3 nbr_glb = cur_glb + dirs_D[i];
-        if(loc_map.is_inside_update_volume(loc_map.glb2loc(nbr_glb)))
+        if(loc_map.is_inside_local_volume(loc_map.glb2loc(nbr_glb)))
             continue;
 
         int3 nbr_vb_key = get_VB_key(nbr_glb);
@@ -127,10 +151,11 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
             nbr_Vb = Vb;
         }else
         {
-            int nbr_alloc_id = hashBase.get_alloc_blk_id(nbr_vb_key);
+            int nbr_alloc_id = hash_base.get_alloc_blk_id(nbr_vb_key);
             if(nbr_alloc_id== -1)
                 continue;
-            nbr_Vb= &(hashBase.alloc[nbr_alloc_id]);
+
+            nbr_Vb= &(hash_base.alloc[nbr_alloc_id]);
         }
         GlbVoxel* nbr_vox = retrive_vox_D(nbr_glb, nbr_Vb);
         // check if nbr is updated by UpdateHashTB(). If previous drone sees nothing, still no need to raise nbr().
@@ -143,10 +168,11 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
         if(eq(nbr_vox->coc_glb, valid_local_coc))
             continue;
 
+
         bool is_nbr_raised = false;
         // tell if nbr_vox->coc_glb disappeared as well
         int3 nbr_coc_buf = loc_map.glb2loc(nbr_vox->coc_glb);
-        if(loc_map.is_inside_update_volume(nbr_coc_buf))
+        if(loc_map.is_inside_local_volume(nbr_coc_buf))
         {
             int nbr_coc_new_val = loc_map.g_aux(nbr_coc_buf.x, nbr_coc_buf.y, nbr_coc_buf.z, 0);
             if(nbr_coc_new_val!=0) // disappeared
@@ -157,11 +183,16 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 nbr_vox->wave_layer = -map_ct;
                 nbr_vox->update_ct = -map_ct;
 
+                // update union. cur_coc_wr must be valid since it is inside local range.
+                nbr_vox->dist_id_pair.sq_dist[0] = cur_coc2nbr;
+                nbr_vox->dist_id_pair.parent_loc_id[1] = loc_map.wr_coc2idx(cur_coc_wr);
+
                 local_q.append(index, overflow, nbr_glb);
                 is_nbr_raised = true;
 
             }
         }
+
         // the case where the nbr cannot be raised: judge if cur can be lowered by nbr
         if(!is_nbr_raised)
         {
@@ -172,36 +203,48 @@ void raise_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 cur_vox->coc_glb = nbr_vox->coc_glb;
                 cur_vox->wave_layer = 1;
                 cur_vox->update_ct = map_ct;
+
+                // update union in vox
+                int3 nbr_coc_wr = loc_map.glb2wave_range(nbr_vox->coc_glb);
+                if(!loc_map.is_inside_wave_range(nbr_coc_wr))
+                    continue;
+                cur_vox->dist_id_pair.sq_dist[0] = nbr_coc2cur;
+                cur_vox->dist_id_pair.parent_loc_id[1] = loc_map.wr_coc2idx(nbr_coc_wr);
+
                 if(!cur_in_q)
                 {
                     cur_in_q = true;
                     int aux_id = atomicAdd(q_aux_num,1);
                     q_aux[aux_id] = cur_glb;
                 }
-
             }
         }
+
     }
 }
 
+
+
+
 __device__ __forceinline__
 void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *overflow,
-                   LocMap &loc_map, HASH_BASE &hashBase, int3* q_aux, int* q_aux_num,
+                   LocMap &loc_map, HASH_BASE &hash_base, int3* q_aux, int* q_aux_num,
                    int num_dirs, const int3* dirs_D, int gray_shade, int map_ct,
                    bool display_glb_edt, int3* changed_keys, int* changed_cnt)
 {
+    volatile int dbg_int=0;
     CrdEqualTo eq;
     if(invalid_src(cur_glb))
         return;
 
     int3 vb_key = get_VB_key(cur_glb);
-    int alloc_id = hashBase.get_alloc_blk_id(vb_key);
+    int alloc_id = hash_base.get_alloc_blk_id(vb_key);
     if(alloc_id== -1)
     {
         printf("cur voxel block not found\n");
         assert(false);
     }
-    VoxelBlock* Vb= &(hashBase.alloc[alloc_id]);
+    VoxelBlock* Vb= &(hash_base.alloc[alloc_id]);
     GlbVoxel* cur_vox = retrive_vox_D(cur_glb, Vb);
 
     // streaming
@@ -218,13 +261,24 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
         return;
     }
 
+    // propagate coc can be outside the local range! (due to raise out)
+
     cur_vox->wave_layer =BLACK; // seems redundant
+
+    // update coc and g_aux from parent id
+    int cur_coc_id =cur_vox->dist_id_pair.parent_loc_id[1];
+    int3 cur_coc_wr = loc_map.id2wr_coc(cur_coc_id);
+    int3 cur_coc_glb = loc_map.wave_range2glb(cur_coc_wr);
+    cur_vox->coc_glb = cur_coc_glb;
+    cur_vox->dist_sq = cur_vox->dist_id_pair.sq_dist[0];
+
     for(int i=0;i<num_dirs;i++)
     {
 
         int3 nbr_glb = cur_glb + dirs_D[i];
+
         int3 nbr_buf = loc_map.glb2loc(nbr_glb);
-//        if(!loc_map.is_inside_update_volume(nbr_buf))
+        if(!loc_map.is_inside_local_volume(nbr_buf))
         {
             int3 nbr_vb_key = get_VB_key(nbr_glb);
             VoxelBlock* nbr_Vb;
@@ -234,11 +288,11 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 nbr_Vb = Vb;
             }else
             {
-                int nbr_alloc_id = hashBase.get_alloc_blk_id(nbr_vb_key);
+                int nbr_alloc_id = hash_base.get_alloc_blk_id(nbr_vb_key);
                 if(nbr_alloc_id== -1)
                     continue;
 
-                nbr_Vb= &(hashBase.alloc[nbr_alloc_id]);
+                nbr_Vb= &(hash_base.alloc[nbr_alloc_id]);
             }
             GlbVoxel* nbr_vox = retrive_vox_D(nbr_glb, nbr_Vb);
             // check if nbr is updated by UpdateHashTB()
@@ -247,6 +301,7 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
 
             int cur_coc2nbr = get_squred_dist(cur_vox->coc_glb, nbr_glb);
             // previously the vehicle see nothing, so this grid should be propagated anyway
+
             if(invalid_coc_glb(nbr_vox->coc_glb))
             {
 
@@ -256,21 +311,11 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 continue;
             }
 
-
-            int origin_dist = atomicMin(&(nbr_vox->dist_sq),cur_coc2nbr);
-
-            // if old dist value is smaller than new dist value: recover the old one
-            if (origin_dist<= nbr_vox->dist_sq)
-            {
-                nbr_vox->dist_sq = origin_dist;
-                continue;
-            }
-
+            Dist_id old_pair;
+            old_pair.ulong= id_atomicMin(&(nbr_vox->dist_id_pair.ulong),cur_coc2nbr, cur_coc_id);
             // if cur_coc2nbr in this thread is the minimum
-            if(cur_coc2nbr == nbr_vox->dist_sq)
+            if(old_pair.sq_dist[0] > cur_coc2nbr )
             {
-
-                nbr_vox->coc_glb = cur_vox->coc_glb;
                 // only append nbr once in a layer
                 int old_color = atomicExch(&(nbr_vox->wave_layer),gray_shade);
                 if(old_color == gray_shade && nbr_vox->update_ct == map_ct)
@@ -281,6 +326,69 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 local_q.append(index, overflow, nbr_glb);
             }
         }
+        else{ // inside local map
+            int cur_coc2nbr = get_squred_dist(cur_vox->coc_glb, nbr_glb);
+            int origin_dist = loc_map.g_aux(nbr_buf.x, nbr_buf.y, nbr_buf.z, 0);
+
+            if(origin_dist>cur_coc2nbr)
+            {
+                // update union
+                int nbr_id = loc_map.id(nbr_buf.x, nbr_buf.y, nbr_buf.z);
+                loc_map.dist_in_pair(nbr_id)= cur_coc2nbr;
+                loc_map.parent_id_in_pair(nbr_id) = loc_map.wr_coc2idx(cur_coc_wr);
+                if(loc_map.wave_layer(nbr_buf.x,nbr_buf.y,nbr_buf.z)==1) // has been in q
+                    continue;
+
+                int aux_id = atomicAdd(q_aux_num,1);
+                q_aux[aux_id] = nbr_buf;
+            }
+        }
+    }
+}
+
+
+__device__ __forceinline__
+void lower_inside(int3 cur_buf, int index, LocalQueues<int3> &local_q, int *overflow,
+                  LocMap &loc_map, int num_dirs, const int3* dirs_D, int gray_shade)
+{
+    if(invalid_src(cur_buf))
+        return;
+
+    int cur_id = loc_map.id(cur_buf.x, cur_buf.y, cur_buf.z);
+    loc_map.wave_layer(cur_buf.x, cur_buf.y, cur_buf.z)= BLACK;
+
+    // update coc and g_aux from parent id
+    int cur_coc_id = loc_map.parent_id_in_pair(cur_id);
+    int3 cur_coc_wr = loc_map.id2wr_coc(cur_coc_id);
+    int3 cur_coc_buf = loc_map.wave_range2loc(cur_coc_wr);
+    loc_map.coc(cur_buf.x, cur_buf.y, cur_buf.z) = cur_coc_buf;
+    loc_map.g_aux(cur_buf.x, cur_buf.y, cur_buf.z,0) = loc_map.dist_in_pair(cur_id);
+
+    for (int i=0; i<num_dirs; i++)
+    {
+        int3 nbr_buf = cur_buf+ dirs_D[i];
+        if(!loc_map.is_inside_local_volume(nbr_buf))
+            continue;
+
+        int nbr_id = loc_map.id(nbr_buf.x,nbr_buf.y,nbr_buf.z);
+        // if nbr_coc not in loc, it has been visited, but the dist_sq may not be the minimum
+
+        int cur_coc2nbr = get_squred_dist(cur_coc_buf, nbr_buf);
+
+        Dist_id old_pair;
+        old_pair.ulong= id_atomicMin(&(loc_map.ulong_in_pair(nbr_id)),cur_coc2nbr, cur_coc_id);
+
+        // if cur_coc2nbr in this thread is the minimum
+        if(old_pair.sq_dist[0] > cur_coc2nbr )
+        {
+            // only append nbr once in a layer
+            int old_color = atomicExch(&loc_map.wave_layer(nbr_buf.x,nbr_buf.y,nbr_buf.z),gray_shade);
+            if(old_color == gray_shade)
+            {
+                continue;
+            }
+            local_q.append(index, overflow, nbr_buf);
+        }
     }
 }
 
@@ -288,7 +396,7 @@ template <class Ktype, class Mtype>
 __global__ void
 BFS_in_block(waveBase<Ktype> wave, Ktype *q1, Ktype *q2, Ktype *q_aux,
              int num_dirs, const int3* dirs_D, int no_of_nodes, int gray_shade,
-             Mtype local_map, HASH_BASE hashBase, int map_ct,
+             Mtype local_map, HASH_BASE hash_base, int map_ct,
               bool display_glb_edt, int3* changed_keys, int* changed_cnt)
 {
     __shared__ LocalQueues<Ktype> local_q;
@@ -314,16 +422,20 @@ BFS_in_block(waveBase<Ktype> wave, Ktype *q1, Ktype *q2, Ktype *q_aux,
             else
                 crd = next_wf[tid];//read the current frontier info from last level's propagation
 
-            if(wave.wave_type[0] == LOWER_OUT)
+            if(wave.wave_type[0] == LOWER_IN)
+            {
+                lower_inside(crd, threadIdx.x & MOD_OP, local_q, wave.overflow,
+                             local_map, num_dirs, dirs_D, gray_shade);
+            }else if(wave.wave_type[0] == LOWER_OUT)
             {
                 lower_outside(crd, threadIdx.x & MOD_OP, local_q, wave.overflow,
-                              local_map, hashBase, q_aux, wave.aux_num,
+                              local_map, hash_base, q_aux, wave.aux_num,
                               num_dirs, dirs_D, gray_shade, map_ct,
                               display_glb_edt, changed_keys, changed_cnt);
             }else if(wave.wave_type[0] == RAISE_OUT)
             {
                 raise_outside(crd, threadIdx.x & MOD_OP, local_q, wave.overflow,
-                              local_map, hashBase, q_aux, wave.aux_num,
+                              local_map, hash_base, q_aux, wave.aux_num,
                               num_dirs, dirs_D, gray_shade, map_ct,
                               display_glb_edt, changed_keys, changed_cnt);
             }
@@ -360,7 +472,7 @@ template <class Ktype, class Mtype>
 __global__ void
 BFS_one_layer(waveBase<Ktype> wave, Ktype *q1, Ktype *q2, Ktype *q_aux,
              int num_dirs, const int3* dirs_D, int no_of_nodes, int gray_shade,
-             Mtype local_map, HASH_BASE hashBase, int map_ct,
+             Mtype local_map, HASH_BASE hash_base, int map_ct,
              bool display_glb_edt, int3* changed_keys, int* changed_cnt)
 {
     __shared__ LocalQueues<Ktype> local_q;
@@ -376,16 +488,20 @@ BFS_one_layer(waveBase<Ktype> wave, Ktype *q1, Ktype *q2, Ktype *q_aux,
     int tid = blockIdx.x*MAX_THREADS_PER_BLOCK + threadIdx.x;
     if(tid < no_of_nodes)
     {
-        if(wave.wave_type[0] == LOWER_OUT)
+        if(wave.wave_type[0] == LOWER_IN)
+        {
+            lower_inside(q1[tid], threadIdx.x & MOD_OP,local_q, wave.overflow,
+                         local_map,num_dirs,dirs_D, gray_shade);
+        }else if(wave.wave_type[0] == LOWER_OUT)
         {
             lower_outside(q1[tid], threadIdx.x & MOD_OP, local_q, wave.overflow,
-                          local_map, hashBase, q_aux, wave.aux_num,
+                          local_map, hash_base, q_aux, wave.aux_num,
                           num_dirs, dirs_D, gray_shade, map_ct,
                           display_glb_edt, changed_keys, changed_cnt);
         }else if(wave.wave_type[0] == RAISE_OUT)
         {
             raise_outside(q1[tid], threadIdx.x & MOD_OP, local_q, wave.overflow,
-                          local_map, hashBase, q_aux, wave.aux_num,
+                          local_map, hash_base, q_aux, wave.aux_num,
                           num_dirs, dirs_D, gray_shade, map_ct,
                           display_glb_edt, changed_keys, changed_cnt);
         }

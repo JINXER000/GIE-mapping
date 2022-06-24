@@ -16,7 +16,7 @@ public:
     void initialize(const sensor_msgs::CameraInfo::ConstPtr& msg, bool valid_NaN);
     void setLocMap(LocMap *lMap);
     void updateLocalOGM(const Projection& proj,const sensor_msgs::Image::ConstPtr &dep_img,
-                                           int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids);
+                        int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids);
     bool is_initialized(){return _initialized;}
 private:
     CamParam _cam_param;
@@ -25,6 +25,5 @@ private:
     REALSENSE_DEPTH_TPYE *_gpu_dep_img;
     bool _initialized = false;
 };
-
 
 #endif // REALSENSE_MAP_MAKER_H

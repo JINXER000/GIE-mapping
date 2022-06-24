@@ -1,3 +1,5 @@
+
+
 #ifndef SRC_MEMSPACE_H
 #define SRC_MEMSPACE_H
 
@@ -47,6 +49,7 @@ namespace vhashing {
         template <typename T>
         T* memspace_alloc(size_t num_elems, device_memspace) {
             T* t = 0;
+//            cudaMalloc(&t, num_elems * sizeof(T));
             GPU_MALLOC(&t, num_elems * sizeof(T));
             return t;
         }

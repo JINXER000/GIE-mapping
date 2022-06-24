@@ -3,7 +3,6 @@
 
 #include "cuda_toolkit/projection.h"
 #include "cuda_toolkit/occupancy/realsense/camera_param.h"
-
 #include "map_structure/local_batch.h"
 
 namespace REALSENSE_FAST

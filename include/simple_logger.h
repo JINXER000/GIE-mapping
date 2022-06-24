@@ -1,3 +1,5 @@
+
+
 #ifndef SRC_SIMPLE_LOGGER_H
 #define SRC_SIMPLE_LOGGER_H
 

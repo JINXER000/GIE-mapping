@@ -1,3 +1,4 @@
+
 #ifndef SRC_WAVE_HELPER_CUH
 #define SRC_WAVE_HELPER_CUH
 
@@ -83,7 +84,9 @@ void parWave(int3* frontier, int3* aux_frontier, int num_dirs, const int3 *dirs_
         {
             printf("Error: local queue was overflow. Need to increase W_LOCAL_QUEUE\n");
             assert(false);
+            break;
         }
+
 
     } while (1);
     wave.reset();

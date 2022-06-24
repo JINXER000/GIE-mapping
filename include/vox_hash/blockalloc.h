@@ -1,3 +1,4 @@
+
 #ifndef SRC_BLOCKALLOC_H
 #define SRC_BLOCKALLOC_H
 
@@ -26,6 +27,7 @@ namespace vhashing {
             Value     *data;
             int32_t  *offsets;
             int *mutex, *link_head;
+            int h_link_head;
 
             BlockAllocBase(int num_elems = 0)
                     : num_elems(num_elems) {}
@@ -37,6 +39,7 @@ namespace vhashing {
                 {
                     assert(false);
                 }
+
                 return data[pointer];
             }
 
@@ -46,15 +49,20 @@ namespace vhashing {
             __host__
                     int32_t allocate_n(int n) {
                 thrust::device_ptr<int> d_link_head(link_head);
-                int h_link_head = *d_link_head;
+                int tmp_link_head = *d_link_head;
 
                 // subtract link head by n
-                h_link_head -= n;
-                if (h_link_head < 0) {
+                tmp_link_head -= n;
+                if (tmp_link_head < 0) {
                     throw "out of block memory";
                 }
-                *d_link_head = h_link_head;
+//                if (tmp_link_head < 0) {
+//                    tmp_link_head = h_link_head;
+//                }
+                *d_link_head = tmp_link_head;
 
+
+                h_link_head = tmp_link_head;
                 return h_link_head + 1;
             }
 
@@ -103,6 +111,8 @@ namespace vhashing {
 #endif
 
                 offsets[which + 1] = p;
+
+
             }
 
         };

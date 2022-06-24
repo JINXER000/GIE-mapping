@@ -1,12 +1,20 @@
+
 #ifndef SRC_LOCAL_BATCH_H
 #define SRC_LOCAL_BATCH_H
 
 #include <cuda_toolkit/cuda_macro.h>
+
 #define VOXTYPE_OCCUPIED 2
 #define VOXTYPE_FREE 1
 #define VOXTYPE_UNKNOWN 0
 #define VOXTYPE_FNT 3
 
+#define XSHIFT 0
+#define YSHIFT 11
+#define ZSHIFT 22
+#define XMASK 0x7ff
+#define YMASK 0x7ff
+#define ZMASK 0x3ff
 
 struct SeenDist
 {
@@ -15,25 +23,34 @@ struct SeenDist
     bool o; // used for thining algorithm
 };
 
+typedef union  {
+    int sq_dist[2];                 // sq_dist[0] = lowest
+    int parent_loc_id[2];                     // parent_loc_id[1] = lowIdx
+    unsigned long long int ulong;    // for atomic update
+} Dist_id;
 
 class LocMap
 {
 public:
-    LocMap(const float voxel_size, const int3 update_size,const unsigned char occupancy_threshold,
+    LocMap(const float voxel_size, const int3 local_size,const unsigned char occupancy_threshold,
            const float ogm_min_h, const float ogm_max_h, const int cutoff_grids_sq):
             _voxel_width(voxel_size),
-            _update_size(update_size),
+            _local_size(local_size),
             _occu_thresh(occupancy_threshold),
             _update_max_h(ogm_max_h),
             _update_min_h(ogm_min_h),
             _cutoff_grids_sq(cutoff_grids_sq)
     {
-        _map_volume = update_size.x * update_size.y * update_size.z;
-        _max_width = update_size.x + update_size.y + update_size.z;
-        _max_loc_dist_sq = update_size.x*update_size.x + update_size.y*update_size.y + update_size.z*update_size.z;
-        _bdr_num =  2*(update_size.x * update_size.y + update_size.y* update_size.z + update_size.x*update_size.z);
-        _half_shift = make_int3(_update_size.x/2, _update_size.y/2, _update_size.z/2);
+        _map_volume = local_size.x * local_size.y * local_size.z;
+        _max_width = local_size.x + local_size.y + local_size.z;
+        _max_loc_dist_sq = local_size.x*local_size.x + local_size.y*local_size.y + local_size.z*local_size.z;
+        _bdr_num =  2*(local_size.x * local_size.y + local_size.y* local_size.z + local_size.x*local_size.z);
+        _half_shift = make_int3(_local_size.x/2, _local_size.y/2, _local_size.z/2);
         seendist_size = _map_volume*sizeof(SeenDist);
+        _wave_range.x = (((0xffffffff) >> XSHIFT) & XMASK)-1; // even numbers
+        _wave_range.y = (((0xffffffff) >> YSHIFT) & YMASK)-1;
+        _wave_range.z = (((0xffffffff) >> ZSHIFT) & ZMASK)-1;
+        printf("Local Map initialized\n");
     }
 
     void create_gpu_map()
@@ -47,13 +64,16 @@ public:
         GPU_MALLOC(&_edt_D, _map_volume*sizeof(float));
         GPU_MEMSET(_edt_D, 0, _map_volume*sizeof(float));
 
-
         GPU_MALLOC(&_aux, _map_volume*sizeof(int));
         GPU_MALLOC(&_g, _map_volume*sizeof(int));
         GPU_MALLOC(&_s, _map_volume*sizeof(int));
         GPU_MALLOC(&_t, _map_volume*sizeof(int));
         GPU_MALLOC(&_coc, sizeof(int3)*_map_volume);
         GPU_MALLOC(&_aux_coc, sizeof(int3)*_map_volume);
+
+        GPU_MALLOC(&_loc_wave_layer, sizeof(int)*_map_volume);
+
+        GPU_MALLOC(&_dist_id_pair, sizeof(Dist_id)*_map_volume);
 
         glb_type_H = new char[_map_volume];
         edt_H = new float[_map_volume];
@@ -73,6 +93,8 @@ public:
         GPU_FREE(_aux);
         GPU_FREE(_coc);
         GPU_FREE(_aux_coc);
+        GPU_FREE(_loc_wave_layer);
+        GPU_FREE(_dist_id_pair);
 
         delete [] glb_type_H;
         delete [] edt_H;
@@ -81,11 +103,11 @@ public:
 
 
     __device__
-    bool is_inside_update_volume(const int3 & crd) const
+    bool is_inside_local_volume(const int3 & crd) const
     {
-        if (crd.x<0 || crd.x>=_update_size.x ||
-            crd.y<0 || crd.y>=_update_size.y ||
-            crd.z<0 || crd.z>=_update_size.z)
+        if (crd.x<0 || crd.x>=_local_size.x ||
+            crd.y<0 || crd.y>=_local_size.y ||
+            crd.z<0 || crd.z>=_local_size.z)
         {
             return false;
         }
@@ -99,9 +121,9 @@ public:
     int3 calculate_pivot_origin(float3 map_center)
     {
         int3 pivot = pos2coord(map_center);
-        pivot.x -= _update_size.x/2;
-        pivot.y -= _update_size.y/2;
-        pivot.z -= _update_size.z/2;
+        pivot.x -= _local_size.x/2;
+        pivot.y -= _local_size.y/2;
+        pivot.z -= _local_size.z/2;
 
         float3 origin = coord2pos(pivot);
 
@@ -112,11 +134,82 @@ public:
     }
 
     __device__ __host__
-    int coord2idx_local(const int3 &c) const
+    bool is_inside_wave_range(const int3 & crd) const
     {
-        return c.x + c.y*_update_size.x + c.z*_update_size.x*_update_size.y;
+        if (crd.x<0 || crd.x>=_wave_range.x ||
+            crd.y<0 || crd.y>=_wave_range.y ||
+            crd.z<0 || crd.z>=_wave_range.z)
+        {
+            return false;
+        }
+        else
+        {
+            return true;
+        }
     }
 
+    __host__
+    void calculate_update_pivot(float3 map_center)
+    {
+        _update_pvt = pos2coord(map_center);
+        _update_pvt.x -= _wave_range.x/2;
+        _update_pvt.y -= _wave_range.y/2;
+        _update_pvt.z -= _wave_range.z/2;
+    }
+    __device__ __host__
+    int coord2idx_local(const int3 &c) const
+    {
+        return c.x + c.y*_local_size.x + c.z*_local_size.x*_local_size.y;
+    }
+
+    __device__ __host__
+    int3 id2wr_coc(const int &idx_1d)
+    {
+        int3 coc_in_update_range;
+        coc_in_update_range.x = (((idx_1d) >> XSHIFT) & XMASK);
+        coc_in_update_range.y = (((idx_1d) >> YSHIFT) & YMASK);
+        coc_in_update_range.z = (((idx_1d) >> ZSHIFT) & ZMASK);
+
+        return coc_in_update_range;
+    }
+
+    __device__ __host__
+    int3 id2coc_glb(const int &idx_1d)
+    {
+        return  wave_range2glb(id2wr_coc(idx_1d));
+    }
+
+    __device__ __host__
+    int3 id2coc_buf(const int &idx_1d)
+    {
+        return wave_range2loc(id2wr_coc(idx_1d));
+    }
+
+    __device__ __host__
+    int wr_coc2idx(const int3 &coc_in_wr)
+    {
+        int idx_1d;
+        if(!is_inside_wave_range(coc_in_wr))
+        {
+            printf("debug here: coc not in wave range\n");
+            assert(false);
+            return -1;
+        }
+        idx_1d = (((coc_in_wr.x) << XSHIFT) | ((coc_in_wr.y) << YSHIFT) | ((coc_in_wr.z) << ZSHIFT));
+        return  idx_1d;
+    }
+
+    __device__ __host__
+    int coc_glb2id(const int3 &coc_glb)
+    {
+        return  wr_coc2idx(glb2wave_range(coc_glb));
+    }
+
+    __device__ __host__
+    int coc_buf2id(const int3 &coc_buf)
+    {
+        return wr_coc2idx(loc2wave_range(coc_buf));
+    }
     __host__ __device__
     int3 pos2coord(const float3 & p) const
     {
@@ -147,10 +240,33 @@ public:
     {
         return c+_pvt;
     }
+    __host__ __device__
+    int3 glb2wave_range(const int3 & c) const
+    {
+        return c-_update_pvt;
+    }
+
+    __host__ __device__
+    int3 wave_range2glb(const int3 & c) const
+    {
+        return c+_update_pvt;
+    }
+
+    __host__ __device__
+    int3 wave_range2loc(const int3 & c) const
+    {
+        return glb2loc(wave_range2glb(c));
+    }
+
+    __host__ __device__
+    int3 loc2wave_range(const int3 & c) const
+    {
+        return glb2wave_range(loc2glb(c));
+    }
     __device__
     int atom_add_type_count(const int3 &crd, int val)
     {
-        if (!is_inside_update_volume(crd))
+        if (!is_inside_local_volume(crd))
             return -1;
 
 #ifdef __CUDA_ARCH__
@@ -160,7 +276,7 @@ public:
     __device__
     int get_vox_count(const int3 &crd)
     {
-        if (!is_inside_update_volume(crd))
+        if (!is_inside_local_volume(crd))
             return 0;
 
         int idx = coord2idx_local(crd);
@@ -170,7 +286,7 @@ public:
     __device__
     void set_vox_count(const int3 &crd, int val)
     {
-        if (!is_inside_update_volume(crd))
+        if (!is_inside_local_volume(crd))
             return;
 
         int idx = coord2idx_local(crd);
@@ -179,7 +295,7 @@ public:
     __device__
     char get_vox_type(const int3 &crd)
     {
-        if  (!is_inside_update_volume(crd))
+        if  (!is_inside_local_volume(crd))
             return VOXTYPE_UNKNOWN;
 
         int idx = coord2idx_local(crd);
@@ -189,7 +305,7 @@ public:
     __device__
     void set_vox_type(const int3 &crd, const char type)
     {
-        if  (!is_inside_update_volume(crd))
+        if  (!is_inside_local_volume(crd))
             return;
 
         int idx = coord2idx_local(crd);
@@ -198,7 +314,7 @@ public:
     __device__
     char get_vox_glb_type(const int3 &crd)
     {
-        if  (!is_inside_update_volume(crd))
+        if  (!is_inside_local_volume(crd))
             return VOXTYPE_UNKNOWN;
 
         int idx = coord2idx_local(crd);
@@ -208,7 +324,7 @@ public:
     __device__
     void set_vox_glb_type(const int3 &crd, const char type)
     {
-        if  (!is_inside_update_volume(crd))
+        if  (!is_inside_local_volume(crd))
             return;
 
         int idx = coord2idx_local(crd);
@@ -231,17 +347,17 @@ public:
 
         switch (face) {
             case 0:
-                return cur_buf_crd.z*_update_size.y+cur_buf_crd.y;
+                return cur_buf_crd.z*_local_size.y+cur_buf_crd.y;
             case 1:
-                return cur_buf_crd.z*_update_size.y+cur_buf_crd.y+_update_size.y*_update_size.z;
+                return cur_buf_crd.z*_local_size.y+cur_buf_crd.y+_local_size.y*_local_size.z;
             case 2:
-                return cur_buf_crd.z*_update_size.x+cur_buf_crd.x+2*_update_size.y*_update_size.z;
+                return cur_buf_crd.z*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z;
             case 3:
-                return cur_buf_crd.z*_update_size.x+cur_buf_crd.x+2*_update_size.y*_update_size.z+_update_size.x*_update_size.z;
+                return cur_buf_crd.z*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+_local_size.x*_local_size.z;
             case 4:
-                return cur_buf_crd.y*_update_size.x+cur_buf_crd.x+2*_update_size.y*_update_size.z+2*_update_size.x*_update_size.z;
+                return cur_buf_crd.y*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+2*_local_size.x*_local_size.z;
             case 5:
-                return cur_buf_crd.y*_update_size.x+cur_buf_crd.x+2*_update_size.y*_update_size.z+2*_update_size.x*_update_size.z+_update_size.x*_update_size.y;
+                return cur_buf_crd.y*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+2*_local_size.x*_local_size.z+_local_size.x*_local_size.y;
             default:
                 printf("wrong face!\n");
                 return -1;
@@ -254,15 +370,15 @@ public:
         if(cur_buf_crd.x ==0)
         {
             return 0;
-        }else if (cur_buf_crd.x == _update_size.x-1) {
+        }else if (cur_buf_crd.x == _local_size.x-1) {
             return 1;
         }else if (cur_buf_crd.y == 0) {
             return 2;
-        }else if (cur_buf_crd.y == _update_size.y-1) {
+        }else if (cur_buf_crd.y == _local_size.y-1) {
             return 3;
         }else if (cur_buf_crd.z == 0) {
             return 4;
-        }else if (cur_buf_crd.z == _update_size.z-1) {
+        }else if (cur_buf_crd.z == _local_size.z-1) {
             return 5;
         }
         return -1;
@@ -285,15 +401,16 @@ public:
         switch (phase)
         {
             case 0:
-                return z*_update_size.x*_update_size.y+y*_update_size.x+x;
+                return z*_local_size.x*_local_size.y+y*_local_size.x+x;
             case 1:
-                return z*_update_size.y*_update_size.x+y*_update_size.y+x;
+                return z*_local_size.y*_local_size.x+y*_local_size.y+x;
             case 2:
-                return z*_update_size.y*_update_size.z+y*_update_size.y+x;
+                return z*_local_size.y*_local_size.z+y*_local_size.y+x;
             default:
-                return z*_update_size.x*_update_size.y+y*_update_size.x+x;
+                return z*_local_size.x*_local_size.y+y*_local_size.x+x;
         }
     }
+
 
     __device__
     float& edt_gpu_out(int x, int y, int z)
@@ -345,6 +462,37 @@ public:
     }
 
     __device__
+    int& dist_in_pair(int idx_1d)
+    {
+        return _dist_id_pair[idx_1d].sq_dist[0];
+    }
+
+    __device__
+    int& parent_id_in_pair(int idx_1d)
+    {
+        return _dist_id_pair[idx_1d].parent_loc_id[1];
+    }
+
+    __device__
+    unsigned  long long int& ulong_in_pair(int idx_1d)
+    {
+        return _dist_id_pair[idx_1d].ulong;
+    }
+
+    __device__
+    int& wave_layer(int x, int y, int z)
+    {
+        int idx_1d = id(x,y,z,0);
+        return wave_layer(idx_1d);
+    }
+    __device__
+    int& wave_layer(int idx_1d)
+    {
+        if(idx_1d>_map_volume)
+            assert(false);
+        return _loc_wave_layer[idx_1d];
+    }
+    __device__
     int f(int y,int i,int x,int z)
     {
         int a = g_aux(x,i,z,1);
@@ -375,7 +523,7 @@ public:
 
     // var
     float _voxel_width;
-    int3 _update_size;
+    int3 _local_size;
 
     unsigned char _occu_thresh;
     float _update_max_h, _update_min_h;
@@ -410,7 +558,12 @@ public:
     float3 _msg_origin; // lower_left pos
 
     // for wave
+    int * _loc_wave_layer;
     int _cutoff_grids_sq;
+    Dist_id *_dist_id_pair;
+
+    int3 _wave_range;
+    int3 _update_pvt;
 };
 
 #endif //SRC_LOCAL_BATCH_H

@@ -36,7 +36,6 @@ void HokuyoMapMaker::initialize(const sensor_msgs::LaserScan::ConstPtr& msg)
     initialize(p);
 }
 
-
 void HokuyoMapMaker::setLocMap(LocMap *lMap)
 {
     _lMap = lMap;

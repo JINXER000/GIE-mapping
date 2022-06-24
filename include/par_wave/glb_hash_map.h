@@ -38,7 +38,6 @@ public:
     // keys in local EDT
     thrust::device_vector<int3> VB_keys_loc_D;
 
-
     // for allocation
     thrust::device_vector<int3> require_alloc_keys_D;
     thrust::device_vector<int> success_alloc_D;
@@ -49,10 +48,10 @@ public:
     thrust::device_vector<int> changed_cnt;
 
     // for wavefront
-    thrust::device_vector<int3> frontierA, frontierB;
-    int fA_num_raw, fB_num_raw;
+    thrust::device_vector<int3> frontierA, frontierB, frontierC;
+    int fA_num_raw, fB_num_raw, fC_num_raw;
 
-    waveWrapper<int3> *waveA, *waveB;
+    waveWrapper<int3> *waveA, *waveB, *waveC;
 
     // for connectivity
     const static int num_dirs_6 =6;// only faces

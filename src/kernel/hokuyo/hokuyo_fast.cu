@@ -5,6 +5,7 @@
 namespace HOKUYO_FAST
 {
 
+
 __global__
 void setLocalOccupancy(LocMap loc_map,
                       SCAN_DEPTH_TPYE *detph_data,
@@ -22,7 +23,7 @@ void setLocalOccupancy(LocMap loc_map,
     int theta_idx;
     float3 glb_pos;
 
-    for (local_crd.x = 0; local_crd.x < loc_map._update_size.x; ++local_crd.x)
+    for (local_crd.x = 0; local_crd.x < loc_map._local_size.x; ++local_crd.x)
     {
         int idx_1d=loc_map.coord2idx_local(local_crd);
         glb_crd = loc_map.loc2glb(local_crd);
@@ -76,13 +77,12 @@ void setLocalOccupancy(LocMap loc_map,
     }
 }
 
-
 void localOGMKernels(LocMap* loc_map, SCAN_DEPTH_TPYE *detph_data, Projection proj, ScanParam param,
                         int3* VB_keys_loc_D, bool for_motion_planner, int rbt_r2_grids)
 {
 
-    const int gridSize = loc_map->_update_size.z;
-    const int blkSize = loc_map->_update_size.y;
+    const int gridSize = loc_map->_local_size.z;
+    const int blkSize = loc_map->_local_size.y;
     setLocalOccupancy<<<gridSize,blkSize>>>(*loc_map,detph_data,proj,param,VB_keys_loc_D,
                                            for_motion_planner,rbt_r2_grids);
 }

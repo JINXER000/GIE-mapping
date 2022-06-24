@@ -8,12 +8,14 @@ display_glb_ogm: true
 vis_interval: 1
 vis_height: 0.8
 
-log_dir: "/home/joseph/GIE_log.csv"
+# profile the rms every time the visualization msg is published
+profile_loc_rms: false
+profile_glb_rms: false
+log_dir: "/home/joseph/test.csv"
 
 occupancy_threshold: 180
 
 voxel_width: 0.1
-
 
 local_size_x: 10
 local_size_y: 10

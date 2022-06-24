@@ -15,7 +15,7 @@ public:
     void initialize(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void setLocMap(LocMap *lMap);
     void updateLocalOGM(const Projection& proj,const sensor_msgs::PointCloud2::ConstPtr &msg,
-                                        int3* VB_keys_loc_D, const int time);
+                        int3* VB_keys_loc_D, const int time);
     bool is_initialized(){return _initialized;}
 
     void pntcld_process(const sensor_msgs::PointCloud2ConstPtr& msg);
