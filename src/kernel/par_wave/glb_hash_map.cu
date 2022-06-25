@@ -83,8 +83,7 @@ void GlbHashMap::allocHashTB()
 
         thrust::device_ptr<int> d_link_head((hash_table_D)->alloc.link_head);
         int h_link_head = *d_link_head;
-        printf("New blocks allocated: %d, unused blks: %d, used blks: %d\n", numJobs, h_link_head, VB_cnt_H);
-
+        printf("New blocks allocated: %d, unused blks: %d\n", numJobs, h_link_head);
         if (numJobs == 0)
             return;
 
@@ -152,21 +151,16 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
                                                                                   raw_pointer_cast(&frontierA[0]),
                                                                                   raw_pointer_cast(&frontierB[0]),
                                                                                   raw_pointer_cast(&frontierC[0]),
-                                                                                  raw_pointer_cast(&(waveC->f_num_shared[0])),
+ 
+    raw_pointer_cast(&(waveA->f_num_shared[0])),
+                                                                                    raw_pointer_cast(&(waveB->f_num_shared[0])),                                                                                 raw_pointer_cast(&(waveC->f_num_shared[0])),
                                                                                   num_dirs_6, dirs_6_D,
                                                                                   map_ct);
 
-    thrust::sort(frontierA.begin(), frontierA.end(), CrdLessThan());
-    auto last_it_A = thrust::unique(frontierA.begin(), frontierA.end(), CrdEqualTo());
-    fA_num_raw = thrust::distance(frontierA.begin(), last_it_A);
-
-    thrust::sort(frontierB.begin(), frontierB.end(), CrdLessThan());
-    auto last_it_B = thrust::unique(frontierB.begin(), frontierB.end(), CrdEqualTo());
-    fB_num_raw = thrust::distance(frontierB.begin(), last_it_B);
-
+    fA_num_raw = waveA->f_num_shared[0];
+    fB_num_raw = waveB->f_num_shared[0];
     fC_num_raw = waveC->f_num_shared[0];
 
-    waveA->f_num_shared[0] = fA_num_raw;
     waveA->aux_num_shared[0] = fB_num_raw;
     parWave<LocMap>(raw_pointer_cast(&frontierA[0]), raw_pointer_cast(&frontierB[0]),
                     num_dirs_6, dirs_6_D, map_ct,
@@ -175,7 +169,6 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
     thrust::fill(frontierA.begin(),frontierA.end(),EMPTY_KEY);
     fB_num_raw = waveA->aux_num_shared[0];
 
-    waveB->f_num_shared[0] = fB_num_raw;
     waveB->aux_num_shared[0] = fC_num_raw;
     parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierC[0]),
                     num_dirs_6, dirs_6_D, map_ct,
@@ -185,7 +178,6 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
     fC_num_raw = waveB->aux_num_shared[0];
 
 
-    waveC->f_num_shared[0] = fC_num_raw;
     parWave<LocMap>(raw_pointer_cast(&frontierC[0]), raw_pointer_cast(&frontierA[0]),
                     num_dirs_6, dirs_6_D, map_ct,
                     _lMap, *waveC, hash_table_D,

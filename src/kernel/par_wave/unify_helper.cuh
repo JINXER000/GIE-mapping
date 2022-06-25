@@ -132,7 +132,7 @@ void updateHashOGMWithSensor(LocMap loc_map, HASH_BASE hash_base, const int time
         {
             if (new_vox_type == VOXTYPE_OCCUPIED)
             {
-                set_hashvoxel_occ_val(cur_vox,250.f, 0.4f, loc_map._occu_thresh, time);
+                set_hashvoxel_occ_val(cur_vox,250.f, 0.8f, loc_map._occu_thresh, time);
             }
 
             if (new_vox_type == VOXTYPE_FREE)
@@ -234,8 +234,9 @@ void MarkLimitedObserve(LocMap loc_map,HASH_BASE hash_base,
     }
 }
 
-__global__
-void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* frontierB,  int3* frontierC, int* fc_num,
+__global__ 
+void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* frontierB,  int3* frontierC,
+                     int* fa_num, int* fb_num, int* fc_num,
                      int num_dirs, int3* dirs_D,int map_ct) {
     int3 c;
     c.z = blockIdx.x;
@@ -384,8 +385,8 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
                     nbr_vox->dist_id_pair.sq_dist[0] = cur_coc2nbr;
                     nbr_vox->dist_id_pair.parent_loc_id[1] = loc_map.wr_coc2idx(cur_coc_wr);
 
-                    int bdr_idx = loc_map.get_bdr_idx(i,c);
-                    frontierB[bdr_idx] = nbr_glb;
+                    int fb_id = atomicAdd(fb_num, 1);
+                    frontierB[fb_id] = nbr_glb;
                 }
                 else if(cur_coc2nbr>nbr_dist_sq && is_nbr_coc_local) // raise_out
                 {
@@ -400,8 +401,8 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
                         nbr_vox->dist_id_pair.sq_dist[0] = cur_coc2nbr;
                         nbr_vox->dist_id_pair.parent_loc_id[1] = loc_map.wr_coc2idx(cur_coc_wr);
 
-                        int bdr_idx = loc_map.get_bdr_idx(i,c);
-                        frontierA[bdr_idx] = nbr_glb;
+                        int fa_id = atomicAdd(fa_num, 1);
+                        frontierA[fa_id] = nbr_glb;
                     }
                 }
             }
