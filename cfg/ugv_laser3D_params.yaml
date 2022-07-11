@@ -1,6 +1,6 @@
 for_motion_planner: false
 display_loc_edt: false
-display_occ: false
+display_loc_ogm: false
 display_glb_edt: true
 display_glb_ogm: true
 vis_interval: 1
@@ -25,6 +25,7 @@ ogm:
   max_height: 10
 
 wave:
+  fast_mode: false
   cutoff_dist: 2
 
 # params of hash table

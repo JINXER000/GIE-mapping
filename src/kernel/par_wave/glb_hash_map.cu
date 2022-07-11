@@ -87,12 +87,6 @@ void GlbHashMap::allocHashTB()
         if (numJobs == 0)
             return;
 
-        if(h_link_head<=numJobs)
-        {
-            printf("Please increase hash table size!\n");
-            assert(false);
-        }
-        
         int blk_start = (hash_table_D)->alloc.allocate_n(numJobs);// 19995
 
         device_ptr<int> unsuccessful(&success_alloc_D[numJobs]);// last elem of success
@@ -120,6 +114,7 @@ void GlbHashMap::allocHashTB()
 
 void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream_glb_ogm)
 {
+
     allocHashTB();
     const int gridSize = _lMap->_local_size.z;
     const int blkSize = _lMap->_local_size.y;
@@ -146,38 +141,50 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
                                                                                   raw_pointer_cast(&stream_VB_keys_D[0]),
                                                                                   raw_pointer_cast(&changed_cnt[0]));
 
+    waveA->f_num_shared[0] = 0;
+    waveB->f_num_shared[0] = 0;
     waveC->f_num_shared[0] = 0;
     obtainFrontiers<<<_lMap->_local_size.z, _lMap->_local_size.x>>>(*_lMap, *hash_table_D,
                                                                                   raw_pointer_cast(&frontierA[0]),
                                                                                   raw_pointer_cast(&frontierB[0]),
                                                                                   raw_pointer_cast(&frontierC[0]),
- 
-    raw_pointer_cast(&(waveA->f_num_shared[0])),
-                                                                                    raw_pointer_cast(&(waveB->f_num_shared[0])),                                                                                 raw_pointer_cast(&(waveC->f_num_shared[0])),
+                                                                                    raw_pointer_cast(&(waveA->f_num_shared[0])),
+                                                                                    raw_pointer_cast(&(waveB->f_num_shared[0])),
+                                                                                  raw_pointer_cast(&(waveC->f_num_shared[0])),
                                                                                   num_dirs_6, dirs_6_D,
                                                                                   map_ct);
+
 
     fA_num_raw = waveA->f_num_shared[0];
     fB_num_raw = waveB->f_num_shared[0];
     fC_num_raw = waveC->f_num_shared[0];
 
-    waveA->aux_num_shared[0] = fB_num_raw;
-    parWave<LocMap>(raw_pointer_cast(&frontierA[0]), raw_pointer_cast(&frontierB[0]),
-                    num_dirs_6, dirs_6_D, map_ct,
-                    _lMap, *waveA, hash_table_D,
-                    display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
-    thrust::fill(frontierA.begin(),frontierA.end(),EMPTY_KEY);
-    fB_num_raw = waveA->aux_num_shared[0];
 
-    waveB->aux_num_shared[0] = fC_num_raw;
-    parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierC[0]),
-                    num_dirs_6, dirs_6_D, map_ct,
-                    _lMap, *waveB, hash_table_D,
-                    display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
-    thrust::fill(frontierB.begin(),frontierB.end(),EMPTY_KEY);
-    fC_num_raw = waveB->aux_num_shared[0];
+    waveA->f_num_shared[0] = fA_num_raw;
+
+    if(!_lMap->_fast_mode)
+    {
+        waveA->aux_num_shared[0] = fB_num_raw;
+        parWave<LocMap>(raw_pointer_cast(&frontierA[0]), raw_pointer_cast(&frontierB[0]),
+                        num_dirs_6, dirs_6_D, map_ct,
+                        _lMap, *waveA, hash_table_D,
+                        display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
+        thrust::fill(frontierA.begin(),frontierA.end(),EMPTY_KEY);
+        fB_num_raw = waveA->aux_num_shared[0];
+
+        waveB->f_num_shared[0] = fB_num_raw;
+        waveB->aux_num_shared[0] = fC_num_raw;
+        parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierC[0]),
+                        num_dirs_6, dirs_6_D, map_ct,
+                        _lMap, *waveB, hash_table_D,
+                        display_glb_edt, raw_pointer_cast(&stream_VB_keys_D[0]), raw_pointer_cast(&changed_cnt[0]));
+        thrust::fill(frontierB.begin(),frontierB.end(),EMPTY_KEY);
+        fC_num_raw = waveB->aux_num_shared[0];
+    }
 
 
+
+    waveC->f_num_shared[0] = fC_num_raw;
     parWave<LocMap>(raw_pointer_cast(&frontierC[0]), raw_pointer_cast(&frontierA[0]),
                     num_dirs_6, dirs_6_D, map_ct,
                     _lMap, *waveC, hash_table_D,

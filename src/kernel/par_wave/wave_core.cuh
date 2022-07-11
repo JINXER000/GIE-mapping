@@ -266,11 +266,18 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
     cur_vox->wave_layer =BLACK; // seems redundant
 
     // update coc and g_aux from parent id
-    int cur_coc_id =cur_vox->dist_id_pair.parent_loc_id[1];
+    int cur_coc_id =cur_vox->dist_id_pair.parent_loc_id[1]; // Caution: 0 in wr frame is invalid!
+    if(cur_coc_id ==0)
+    {
+        printf("debug here: invalid cur_coc_id\n");
+        assert(false);
+    }
     int3 cur_coc_wr = loc_map.id2wr_coc(cur_coc_id);
     int3 cur_coc_glb = loc_map.wave_range2glb(cur_coc_wr);
     cur_vox->coc_glb = cur_coc_glb;
     cur_vox->dist_sq = cur_vox->dist_id_pair.sq_dist[0];
+
+
 
     for(int i=0;i<num_dirs;i++)
     {
@@ -300,14 +307,10 @@ void lower_outside(int3 cur_glb, int index, LocalQueues<int3> &local_q, int *ove
                 continue;
 
             int cur_coc2nbr = get_squred_dist(cur_vox->coc_glb, nbr_glb);
-            // previously the vehicle see nothing, so this grid should be propagated anyway
 
+            // previously the vehicle see nothing, don't update
             if(invalid_coc_glb(nbr_vox->coc_glb))
             {
-
-                nbr_vox->dist_sq = cur_coc2nbr;
-                nbr_vox->coc_glb = cur_vox->coc_glb;
-                local_q.append(index, overflow, nbr_glb);
                 continue;
             }
 
@@ -357,12 +360,9 @@ void lower_inside(int3 cur_buf, int index, LocalQueues<int3> &local_q, int *over
     int cur_id = loc_map.id(cur_buf.x, cur_buf.y, cur_buf.z);
     loc_map.wave_layer(cur_buf.x, cur_buf.y, cur_buf.z)= BLACK;
 
-    // update coc and g_aux from parent id
     int cur_coc_id = loc_map.parent_id_in_pair(cur_id);
     int3 cur_coc_wr = loc_map.id2wr_coc(cur_coc_id);
     int3 cur_coc_buf = loc_map.wave_range2loc(cur_coc_wr);
-    loc_map.coc(cur_buf.x, cur_buf.y, cur_buf.z) = cur_coc_buf;
-    loc_map.g_aux(cur_buf.x, cur_buf.y, cur_buf.z,0) = loc_map.dist_in_pair(cur_id);
 
     for (int i=0; i<num_dirs; i++)
     {

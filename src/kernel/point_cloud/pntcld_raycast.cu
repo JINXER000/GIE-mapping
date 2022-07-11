@@ -81,7 +81,7 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
         return;
 
     float3 glb_pos = proj.L2G*pnt_cld[id];
-    if (glb_pos.z > loc_map._update_min_h && glb_pos.z < loc_map._update_max_h)
+    if (glb_pos.z >= loc_map._update_min_h && glb_pos.z <= loc_map._update_max_h)
     {
         int3 glb_crd = loc_map.pos2coord(glb_pos);
         int3 loc_crd = loc_map.glb2loc(glb_crd);

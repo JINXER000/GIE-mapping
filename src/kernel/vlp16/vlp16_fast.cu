@@ -75,10 +75,13 @@ namespace VLP_FAST
                 // Not observable
                 VB_keys_loc_D[idx_1d] = EMPTY_KEY; // vox type is unknonw
             }
-            else
+            else if(glb_pos.z >= loc_map._update_min_h && glb_pos.z <= loc_map._update_max_h)
             {
                 loc_map.set_vox_type(local_crd,VOXTYPE_OCCUPIED);
                 VB_keys_loc_D[idx_1d] = get_VB_key(glb_crd);
+            }else
+            {
+                VB_keys_loc_D[idx_1d] = EMPTY_KEY;
             }
         }
     }

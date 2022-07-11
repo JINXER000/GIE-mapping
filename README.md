@@ -4,7 +4,7 @@
 
 Source code for the paper: **GPU-accelerated Incremental Euclidean Distance Transform for Online Motion Planning of Mobile Robots**
 
-This work has been accepted by IEEE Robotics and Automation Letters 2022. 
+This work has been accepted by IEEE Robotics and Automation Letters 2022 and will be presented in IROS 2022, Kyoto.
 
 This software is a volumetric mapping
 system that effectively calculates Occupancy Grid Maps (OGMs)
@@ -24,7 +24,7 @@ performance with limited onboard computational resources.
 The supplementary video can be viewed here:
 
 <p align="center">
-<a href="https://youtu.be/QSFRpEtZT2o
+<a href="https://youtu.be/1g4AnkHAiZ8
 " target="_blank"><img src="figure/coverpage.png"
 alt="GIE-mapping  introduction video" width="480" height="270" /></a>
 </p>
@@ -55,7 +55,7 @@ Please cite our paper if you use this project in your research:
  We plan to improve the efficiency of this part by adopting more efficient data structures of GPU hash table.
 # Installation
 ## Prerequisite
-1. This project runs CUDA and requires a computer with **Nvidia GPU**. We have successfully tested this project on CUDA 9.0, 10.2, and 11.1.
+1. This project runs CUDA and requires a computer with **Nvidia GPU**. We have successfully tested this project on CUDA 9.0, 10.2, 11.3 and 11.4.
 2. Install Ubuntu with ROS. This project has been tested on Ubuntu 16.04(ROS Kinetic) and 18.04(ROS Melodic). 
 ## Recompile cuTT 
 cuTT is a library used for faster batch EDT. 
@@ -96,9 +96,10 @@ source devel/setup.bash
 to your own directory, otherwise an error will be thrown. After every launch, an .csv file will be left at *log_dir* recording the speed and accuracy (if the display and profile options are enabled). 
 - If the local size is too large, an "invalid argument" error will be thrown due to CUDA does not support such a large thread-block.
 - The parameters *bucket_max* and *block_max* has to be increased if you are doing large-scale and fine-resolution mapping. The initialization time may be longer. 
-- The software is being actively updated, so there might be inconsistency on the data between our paper and the supplementary video.
+- The software is being actively updated, and there may be inconsisitency between our paper and the actual implementation. The most updated profiling data can be viewed in our [supplementary video](https://youtu.be/1g4AnkHAiZ8).
 
-Please kindly leave a **star** if this software is helpful to your projects :)
+
+Please kindly leave a **star** if this software is helpful to your projects :3
 ## Try with datasets
 ### UGV-corridor
 Please download the dataset [here](https://drive.google.com/file/d/1COHl_jEaWHl09kPolfXgYs66_YTrb3uH/view?usp=sharing).
@@ -153,14 +154,17 @@ Remember to set *use_sim_time* parameter in each launch file as **false** in the
 - Turn off Rviz during the run since it will occupy a large amount of GPU resources.
 - Disable both *display_glb_edt* and *display_glb_ogm* parameter. Hence the GPU hash table won't be streamed to CPU at every iteration.
 - Decrease the parameter *cutoff_dist* to a small number (e.g., 2m).
+- Turn on *fast_mode* parameter. It will disable wavefront A and wavefront B (please see details in our [paper](https://ieeexplore.ieee.org/abstract/document/9782137)). The accuracy is nearly the same as the original mode in confined space, e.g., in Cow-Lady dataset.
 
 ### Integrate with motion planners
-Our system publishes the EDT surround as CostMap.msg in the topic "cost_map". Each voxel contains visibility information and the distance value. If your motion planning package are not implemented together with GIE, then you can only access the local EDT information by subscribing to the topic "cost_map".
+Please set *for_motion_planner* parameter as true. It makes the current robot position valid and observed.
+
+Our system publishes the EDT surround by the robot as CostMap.msg in the topic "cost_map". Each voxel contains visibility information and the distance value. If your motion planning package are not implemented together with GIE, then you can only access the local EDT information by subscribing to the topic "cost_map".
 
 To access the global EDT directly, you are recommended to implement a  GPU-based motion planner together with GIE-mapping. 
-Each voxel  can be retrieved by using device function  *get_VB_key()* and *get_voxID_in_VB()*. 
+Each voxel  can be retrieved by using device function  *get_VB_key()* and *get_voxID_in_VB()*. In this way, the *display_glb_ogm* parameter can be *false*, saveing you tons of time.
 
-If you are using a  CPU-based planner, you can retriev the voxel block ID like this:
+If you are using a  CPU-based planner, you can retrieve the voxel block ID like this:
 ```cpp
  int VB_idx =_hash_map->hash_table_H_std.find(blk_key)->second;
 ```
@@ -178,3 +182,7 @@ Developing
 ### June 24, 2022
 - Add support for 16-line 3D LiDAR.
 - Fix some bugs.
+### July 11, 2022
+- Batch EDT is largely accelerated.
+- Fix some bugs in corner cases.
+- Add Fast mode.

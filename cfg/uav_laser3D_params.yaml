@@ -1,6 +1,6 @@
 for_motion_planner: false
-display_loc_edt: false
-display_occ: false
+display_loc_edt: true
+display_loc_ogm: false
 display_glb_edt: true
 display_glb_ogm: true
 vis_interval: 1
@@ -17,13 +17,14 @@ voxel_width: 0.10
 
 local_size_x: 16
 local_size_y: 16
-local_size_z: 4
+local_size_z: 2
 
 ogm:
   min_height: -10
   max_height: 10
 
 wave:
+  fast_mode: false
   cutoff_dist: 6
 
 # params of hash table

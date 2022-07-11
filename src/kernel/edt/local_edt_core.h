@@ -4,8 +4,6 @@
 #define SRC_LOCAL_EDT_CORE_H
 
 #include <cuda_toolkit/projection.h>
-//#include <cuda_toolkit/occupancy/occupancy_map.h>
-//#include <cuda_toolkit/edt/edt_map.h>
 #include "map_structure/local_batch.h"
 #include <cutt/cutt.h>
 #include "par_wave/voxmap_utils.cuh"
@@ -26,15 +24,16 @@ namespace EDT_CORE
         int vox_type = loc_map.get_vox_glb_type(c);
         if (vox_type == VOXTYPE_OCCUPIED)
         {
-            loc_map.g(c.x,0,c.z,0) = 0;
-            loc_map.coc(c.x, c.y, c.z) = int3{c.x,c.y,c.z};
+            loc_map.g(c.x,c.y,c.z,0) = 0;
+            int3 coc_xyz = int3{c.x,c.y,c.z};
+            loc_map.coc_idx(c.x,c.y,c.z,0) = loc_map.loc_coc2idx(coc_xyz);
         }
         else
         {
-            loc_map.g(c.x,0,c.z,0) = loc_map._max_width;
-            loc_map.coc(c.x,c.y,c.z) = EMPTY_KEY;
+            loc_map.g(c.x,c.y,c.z,0) = loc_map._max_width;
+            int3 coc_xyz = loc_map.INVALID_LOC_COC;
+            loc_map.coc_idx(c.x,c.y,c.z,0) = loc_map.loc_coc2idx(coc_xyz);
         }
-        loc_map.coc_aux(c.x, c.y, c.z) = EMPTY_KEY;
 
         for (c.y=1; c.y<loc_map._local_size.y; c.y++)
         {
@@ -42,41 +41,44 @@ namespace EDT_CORE
             if (vox_type == VOXTYPE_OCCUPIED)
             {
                 loc_map.g(c.x,c.y,c.z,0) = 0;
-                loc_map.coc(c.x, c.y, c.z) = int3{c.x,c.y,c.z};
+                int3 coc_xyz = int3{c.x,c.y,c.z};
+                loc_map.coc_idx(c.x, c.y,c.z,0) = loc_map.loc_coc2idx(coc_xyz);
             }
             else
             {
-
-                if (loc_map.coc(c.x, c.y-1, c.z).y < loc_map._max_width)
+                int3 coc_xymz = loc_map.get_coc_viaID(c.x, c.y-1, c.z, 0, false);
+                int3 coc_xyz = loc_map.get_coc_viaID(c.x, c.y, c.z, 0, false);
+                if(coc_xymz.y< loc_map._max_width)
                 {
                     loc_map.g(c.x,c.y,c.z,0) = 1 + loc_map.g(c.x,c.y-1,c.z,0);
-                    loc_map.coc(c.x,c.y,c.z).y=loc_map.coc(c.x,c.y-1,c.z).y;
+                    coc_xyz.y =  coc_xymz.y;
+                    loc_map.coc_idx(c.x, c.y, c.z, 0) = loc_map.loc_coc2idx(coc_xyz);
                 }else
                 {
                     loc_map.g(c.x,c.y,c.z,0)=loc_map._max_width;
-                    loc_map.coc(c.x,c.y,c.z) = EMPTY_KEY;
+                    int3 coc_xyz = loc_map.INVALID_LOC_COC;
+                    loc_map.coc_idx(c.x, c.y,c.z,0) = loc_map.loc_coc2idx(coc_xyz);
                 }
-
             }
-            loc_map.coc_aux(c.x, c.y, c.z) = EMPTY_KEY;
         }
         // Second pass
         for (c.y=loc_map._local_size.y-2;c.y>=0;c.y--)
         {
+            int3 coc_xypz = loc_map.get_coc_viaID(c.x, c.y+1, c.z, 0, false);
+            int3 coc_xyz = loc_map.get_coc_viaID(c.x, c.y, c.z, 0, false);
             if (loc_map.g(c.x,c.y+1,c.z,0) < loc_map.g(c.x,c.y,c.z,0))
             {
-                if (loc_map.coc(c.x, c.y+1, c.z).y < loc_map._max_width)
+                if(coc_xypz.y < loc_map._max_width)
                 {
                     loc_map.g(c.x,c.y,c.z,0) = 1+loc_map.g(c.x,c.y+1,c.z,0);
-                    loc_map.coc(c.x,c.y,c.z).y=loc_map.coc(c.x,c.y+1,c.z).y;
+                    coc_xyz.y =  coc_xypz.y;
+                    loc_map.coc_idx(c.x, c.y, c.z, 0) = loc_map.loc_coc2idx(coc_xyz);
                 }else
                 {
                     loc_map.g(c.x,c.y,c.z,0) = loc_map._max_width;
                 }
             }
-
         }
-
     }
 
     __global__
@@ -111,16 +113,20 @@ namespace EDT_CORE
                 }
             }
         }
-        for (int u=loc_map._local_size.x-1;u>=0;u--)
+        for (int u=loc_map._local_size.x-1;u>=0;u--) // coc_aux <- coc
         {
             loc_map.g(x,u,z,1)=loc_map.f(u,loc_map.s(x,q,z,1),x,z);
 
             int tmpcocx=loc_map.s(x,q,z,1);
-            loc_map.coc_aux(u,x,z).x=tmpcocx;
+            int3 coc_xuz = loc_map.get_coc_viaID(x, u, z, 1, false);
+            coc_xuz.x = tmpcocx;
 
-            int tmpcocy=loc_map.coc(tmpcocx,x,z).y;
-            if(tmpcocy < loc_map._max_width)
-                loc_map.coc_aux(u,x,z).y=tmpcocy;
+            int3 coc_xtxz_aux = loc_map.get_coc_viaID(x, tmpcocx, z, 1, true);
+            if(coc_xtxz_aux.y< loc_map._max_width)
+            {
+                coc_xuz.y = coc_xtxz_aux.y;
+            }
+            loc_map.coc_idx(x, u, z, 1) = loc_map.loc_coc2idx(coc_xuz);
 
             if (u == loc_map.t(x,q,z,1))
                 q--;
@@ -165,14 +171,20 @@ namespace EDT_CORE
             loc_map.g(x,u,z,2) = loc_map.f_z(u,loc_map.s(x,q,z,2),z,x);
 
             int tmpcocz=loc_map.s(x,q,z,2);
-            loc_map.coc(z,x,u).z=tmpcocz;
+            int3 coc_xuz = loc_map.get_coc_viaID(x, u, z, 2, false);
+            coc_xuz.z = tmpcocz;
 
-            int tmpcocx=loc_map.coc_aux(z,x,tmpcocz).x;
-            if(tmpcocx < loc_map._max_width)
-                loc_map.coc(z,x,u).x=tmpcocx;
-            int tmpcocy=loc_map.coc_aux(z,x,tmpcocz).y;
-            if(tmpcocy< loc_map._max_width)
-                loc_map.coc(z,x,u).y=tmpcocy;
+            int3 coc_xtzz_aux = loc_map.get_coc_viaID(x, tmpcocz, z, 2, true);
+            if(coc_xtzz_aux.x< loc_map._max_width)
+            {
+                coc_xuz.x = coc_xtzz_aux.x;
+            }
+
+            if(coc_xtzz_aux.y< loc_map._max_width)
+            {
+                coc_xuz.y = coc_xtzz_aux.y;
+            }
+            loc_map.coc_idx(x, u, z, 2) = loc_map.loc_coc2idx(coc_xuz);
 
             if (u==loc_map.t(x,q,z,2))
                 q--;

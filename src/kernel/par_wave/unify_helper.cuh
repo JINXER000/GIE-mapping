@@ -182,14 +182,16 @@ void MarkLimitedObserve(LocMap loc_map,HASH_BASE hash_base,
             continue;
         int cur_id = loc_map.id(c.x, c.y, c.z);
 
-        // check buf coc
-        coc_new = loc_map.coc(c.x, c.y, c.z);
+        coc_new = loc_map.get_coc_viaID(c.x, c.y, c.z, 0, true);
         dist_sq_new = loc_map.g_aux(c.x, c.y, c.z, 0);
 
-        // see nothing and invalid
-        if (invalid_coc_buf(coc_new) && dist_sq_new < loc_map._max_loc_dist_sq) {
-            assert(false);
-            continue;
+
+        if (invalid_coc_buf(coc_new, loc_map._max_width))
+        {
+            // see nothing, but can be updated by limited observation process later
+            loc_map.dist_in_pair(cur_id)= EMPTY_VALUE; // set dist invalid, since every bit in parent_id is meaningful
+            loc_map.parent_id_in_pair(cur_id) = 0xffffffff;
+            loc_map.g_aux(c.x, c.y, c.z, 0) = EMPTY_VALUE; // instead of recognize it as invalid, it will be regarded as unseen
         }
 
         // update hash table
@@ -209,28 +211,28 @@ void MarkLimitedObserve(LocMap loc_map,HASH_BASE hash_base,
         cur_coc_glb_old = cur_vox->coc_glb;
         int3 cur_coc_buf_old = loc_map.glb2loc(cur_coc_glb_old);
         bool old_coc_inloc = loc_map.is_inside_local_volume(cur_coc_buf_old); // EMPTY_VALUE will be outside
-
-        if (dist_sq_new > dist_sq_old && !old_coc_inloc) {
+        bool limited_observe = dist_sq_new > dist_sq_old && !old_coc_inloc;
+        if (limited_observe) {
             // limited observation: update batch
-            loc_map.coc(c.x, c.y, c.z) = cur_coc_buf_old;
+            coc_new = cur_coc_buf_old;
             loc_map.g_aux(c.x, c.y, c.z, 0) = dist_sq_old;
         }
-
-        // copy new batch value to read-only backups (left)
-        loc_map.coc_aux(c.x, c.y, c.z) = loc_map.coc(c.x, c.y, c.z);
-        loc_map.g(c.x, c.y, c.z, 0) = loc_map.g_aux(c.x, c.y, c.z, 0);
-
 
         // copy g and coc to id_dist pair. Check coc inside update range
         int3 cur_coc_wr = loc_map.loc2wave_range(coc_new);
         if(!loc_map.is_inside_wave_range(cur_coc_wr))
         {
             loc_map.dist_in_pair(cur_id)= EMPTY_VALUE; // set dist invalid, since every bit in parent_id is meaningful
+            loc_map.g_aux(c.x, c.y, c.z, 0) = EMPTY_VALUE; // instead of recognize it as invalid, it will be regarded as unseen
         }else
         {
             loc_map.dist_in_pair(cur_id)= loc_map.g_aux(c.x, c.y, c.z, 0);
             loc_map.parent_id_in_pair(cur_id) = loc_map.wr_coc2idx(cur_coc_wr);
         }
+        // copy new batch value to read-only backups (left)
+        loc_map.g(c.x, c.y, c.z, 0) = loc_map.g_aux(c.x, c.y, c.z, 0);
+        loc_map.coc_idx(c.x, c.y, c.z, 0) = loc_map.parent_id_in_pair(cur_id); // actually wr, not loc
+
     }
 }
 
@@ -249,29 +251,23 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
             continue;
 
         int3 cur_glb = loc_map.loc2glb(c);
-        int3 cur_coc_buf = loc_map.coc_aux(c.x, c.y, c.z);
+        int cur_id = loc_map.id(c.x, c.y, c.z);
+        int3 cur_coc_wr = loc_map.get_coc_viaID(c.x, c.y, c.z, 0, false);  // !It is actually the left_value of cur wave coc
+        int3 cur_coc_buf = loc_map.wave_range2loc(cur_coc_wr);
+        int3 cur_coc_glb = loc_map.loc2glb(cur_coc_buf);
+
+
         int cur_dist_sq = loc_map.g(c.x, c.y, c.z, 0);
 
         bool cur_coc_in_loc = loc_map.is_inside_local_volume(cur_coc_buf);
-        // if false, then it is due to limited observation. no need to extract frontier
+        // if false, then it is due to limited observation (or see nothing). no need to extract frontier
         if(!cur_coc_in_loc)
         {
             continue;
         }
         bool cur_in_q = false; // if true, then cur_glb has been pushed to a frontier
 
-        // see nothing?
-        if (invalid_coc_buf(cur_coc_buf) ) {
-            if(cur_dist_sq < loc_map._max_loc_dist_sq)
-            {
-                assert(false);
-            }
-            continue;
-        }
-        int3 cur_coc_glb = loc_map.loc2glb(cur_coc_buf);
-        int3 cur_coc_wr = loc_map.glb2wave_range(cur_coc_glb);
         bool nbr_has_unknown = false;
-        int cur_id = loc_map.id(c.x, c.y, c.z);
         for (int i = 0; i < num_dirs; i++) {
             int3 nbr_buf = c + dirs_D[i];
 
@@ -288,15 +284,9 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
 
                 // if cur coc in loc and nbr coc not in loc, compare dist
                 int nbr_dist_sq = loc_map.g(nbr_buf.x,nbr_buf.y,nbr_buf.z,0);
-                int3 nbr_coc_buf = loc_map.coc_aux(nbr_buf.x,nbr_buf.y,nbr_buf.z);
-                if(invalid_coc_buf(nbr_coc_buf))
-                {
-                    printf("debug here: invalid coc_buf\n");
-                    assert(false);
-                    continue;
-                }
+                int3 nbr_coc_wr = loc_map.get_coc_viaID(nbr_buf.x,nbr_buf.y,nbr_buf.z, 0, false);  // left value of nbr wave coc
+                int3 nbr_coc_buf = loc_map.wave_range2loc(nbr_coc_wr);
 
-                int3 nbr_coc_wr = loc_map.loc2wave_range(nbr_coc_buf);
                 bool is_nbr_coc_valid = loc_map.is_inside_wave_range(nbr_coc_wr);
                 bool is_nbr_coc_in_loc = loc_map.is_inside_local_volume(nbr_coc_buf);
                 if(!is_nbr_coc_in_loc && is_nbr_coc_valid)
@@ -337,9 +327,8 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
                 }
 
                 int nbr_dist_sq = nbr_vox->dist_sq;
-                if (invalid_dist_glb(nbr_dist_sq))
+                if (invalid_dist_glb(nbr_dist_sq))// maybe the last frame sees nothing
                 {
-                     printf("debug here: invalid_dist_glb\n");
                     continue;
                 }
                 int3 nbr_coc_glb = nbr_vox->coc_glb;
@@ -373,6 +362,9 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
                     }
                 }
 
+                if(loc_map._fast_mode)
+                    continue;
+
                 int cur_coc2nbr = get_squred_dist(nbr_buf,cur_coc_buf);
 
                 // lower out
@@ -385,8 +377,10 @@ void obtainFrontiers(LocMap loc_map, HASH_BASE hash_base,int3* frontierA, int3* 
                     nbr_vox->dist_id_pair.sq_dist[0] = cur_coc2nbr;
                     nbr_vox->dist_id_pair.parent_loc_id[1] = loc_map.wr_coc2idx(cur_coc_wr);
 
+
                     int fb_id = atomicAdd(fb_num, 1);
                     frontierB[fb_id] = nbr_glb;
+
                 }
                 else if(cur_coc2nbr>nbr_dist_sq && is_nbr_coc_local) // raise_out
                 {
@@ -433,6 +427,18 @@ void UpdateHashBatch(LocMap loc_map,HASH_BASE hash_base,
         if (cur_vox_type == VOXTYPE_UNKNOWN)
             continue;
 
+        // exception
+        if(loc_map.dist_in_pair(cur_id) == EMPTY_VALUE)
+        {
+            // see nothing, update
+            if(loc_map.parent_id_in_pair(cur_id) == 0xffffffff)
+            {
+                loc_map.edt_gpu_out(c.x, c.y, c.z) = loc_map._max_loc_dist_sq;
+            }// else coc outside the wave range, don't update
+            continue;
+        }
+
+
         // update hash table
         int3 vb_key = get_VB_key(cur_glb);
 
@@ -447,11 +453,12 @@ void UpdateHashBatch(LocMap loc_map,HASH_BASE hash_base,
         VoxelBlock* Vb= &(hash_base.alloc[alloc_id]);
         GlbVoxel* cur_vox = retrive_vox_D(cur_glb, Vb);
 
-        int3 coc_new = loc_map.coc(c.x,c.y,c.z);
-        int dist_sq_new = loc_map.g_aux(c.x,c.y,c.z,0);
+        int cur_coc_id = loc_map.parent_id_in_pair(cur_id);
+        int3 cur_coc_wr = loc_map.id2wr_coc(cur_coc_id);
+        int dist_sq_new = loc_map.dist_in_pair(cur_id);
         int dist_sq_old = cur_vox->dist_sq;
 
-        cur_vox->coc_glb = loc_map.loc2glb(coc_new);
+        cur_vox->coc_glb = loc_map.wave_range2glb(cur_coc_wr);
         cur_vox->dist_sq = dist_sq_new;
         loc_map.edt_gpu_out(c.x, c.y, c.z) = sqrtf(dist_sq_new);
 

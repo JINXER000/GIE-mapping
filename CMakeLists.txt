@@ -85,6 +85,7 @@ cuda_add_executable(
     src/volumetric_mapper.cpp
     src/kernel/edt/local_edt.cu src/vlp16_map_maker.cpp
     src/kernel/vlp16/vlp16_fast.cu
+    src/kernel/edt/warmup.cu
 )
 
 add_dependencies(

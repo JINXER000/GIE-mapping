@@ -174,15 +174,13 @@ private:
 
                     pos = _loc_map->coord2pos(_loc_map->loc2glb(crd));
 
-                    if(param.display_occ)
+                    if(param.display_loc_ogm && _loc_map->glb_type_H[idx] == VOXTYPE_OCCUPIED)
                     {
                         pcl::PointXYZI occu_pt;
                         occu_pt.x = pos.x;
                         occu_pt.y = pos.y;
                         occu_pt.z = pos.z;
                         occu_pt.intensity = _loc_map->glb_type_H[idx];
-                        if(pos.z>1 && occu_pt.intensity == VOXTYPE_FNT)
-                            occu_pt.intensity = VOXTYPE_FREE;
                         _occ_pnt_cld->points.push_back (occu_pt);
                     }
 
@@ -199,7 +197,7 @@ private:
                 }
             }
         }
-        if(param.display_occ)
+        if(param.display_loc_ogm)
         {
             pcl_conversions::toPCL(ros::Time::now(), _occ_pnt_cld->header.stamp);
             _occ_rviz_pub.publish (_occ_pnt_cld);
@@ -305,7 +303,7 @@ private:
             _mapTimer.stop();
         }
 
-        if(param.display_occ || param.display_loc_edt)
+        if(param.display_loc_ogm || param.display_loc_edt)
         {
             publish_local_ptcld_2_rviz();
         }

@@ -1,6 +1,8 @@
 
 
 #include "volumetric_mapper.h"
+#include "warmup.h"
+
 VOLMAPNODE::VOLMAPNODE()
 {
     // Load parameters
@@ -61,7 +63,8 @@ VOLMAPNODE::VOLMAPNODE()
     int3 local_grids = make_int3(param.local_size_x/param.voxel_width, param.local_size_y/param.voxel_width, param.local_size_z/param.voxel_width);
 
     // setup local map
-    _loc_map = new LocMap(param.voxel_width, local_grids, param.occupancy_threshold, param.ogm_min_h, param.ogm_max_h, param.cutoff_grids_sq);
+    _loc_map = new LocMap(param.voxel_width, local_grids, param.occupancy_threshold, param.ogm_min_h, param.ogm_max_h,
+                          param.cutoff_grids_sq, param.fast_mode);
     _pnt_map_maker.setLocMap(_loc_map);
     _rea_map_maker.setLocMap(_loc_map);
     _hok_map_maker.setLocMap(_loc_map);
@@ -72,7 +75,7 @@ VOLMAPNODE::VOLMAPNODE()
     _hash_map = new GlbHashMap(_loc_map->_bdr_num,_loc_map->_local_size, param.max_bucket, param.max_block);
     _hash_map->setLocMap(_loc_map);
 
-    if (param.display_occ)
+    if (param.display_loc_ogm)
     {
         _occ_rviz_pub = _nh.advertise<PntCldI>("occ_map",1);
         _occ_pnt_cld = PntCldI::Ptr(new PntCldI);
@@ -112,6 +115,8 @@ VOLMAPNODE::VOLMAPNODE()
     (*logger)<<"Occupancy time"<<"EDT time"<< "RMSE";
 
     gtc = new Gnd_truth_checker();
+
+    warmupCuda();
 
     // Timer
     _mapTimer = _nh.createTimer(ros::Duration(0.5), &VOLMAPNODE::publishMap, this);
@@ -177,6 +182,7 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
     (*logger)<<endrow<<(float)ogm_duration;
 
     start = std::chrono::steady_clock::now();
+
 
     EDT_OCC::batchEDTUpdate(_loc_map, _rotation_plan, _time);
 

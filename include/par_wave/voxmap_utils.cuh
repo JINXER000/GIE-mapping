@@ -173,9 +173,10 @@ bool invalid_coc_glb(const int3 coc)
 }
 
 __device__ __host__ __forceinline__
-bool invalid_coc_buf(const int3 &coc)
+bool invalid_coc_buf(const int3 &coc, const int loc_max_width)
 {
-    return  coc.x>100000 || coc.y > 100000 || coc.z > 100000;
+    return  coc.x>loc_max_width || coc.y > loc_max_width || coc.z > loc_max_width ||
+            coc.x <0 || coc.y<0 || coc.z<0;
 }
 
 __device__ __forceinline__

@@ -2,7 +2,7 @@ for_motion_planner: true
 robot_r: 0.2
 
 display_loc_edt: true
-display_occ: false
+display_loc_ogm: false
 display_glb_edt: true
 display_glb_ogm: true
 vis_interval: 1
@@ -11,7 +11,7 @@ vis_height: 0.8
 # profile the rms every time the visualization msg is published
 profile_loc_rms: false
 profile_glb_rms: false
-log_dir: "/home/joseph/test.csv"
+log_dir: "/home/joseph/yzchen_ws/UGV/edt_opensource/log/test.csv"
 
 occupancy_threshold: 180
 

@@ -33,13 +33,14 @@ class LocMap
 {
 public:
     LocMap(const float voxel_size, const int3 local_size,const unsigned char occupancy_threshold,
-           const float ogm_min_h, const float ogm_max_h, const int cutoff_grids_sq):
+           const float ogm_min_h, const float ogm_max_h, const int cutoff_grids_sq, const bool fast_mode):
             _voxel_width(voxel_size),
             _local_size(local_size),
             _occu_thresh(occupancy_threshold),
             _update_max_h(ogm_max_h),
             _update_min_h(ogm_min_h),
-            _cutoff_grids_sq(cutoff_grids_sq)
+            _cutoff_grids_sq(cutoff_grids_sq),
+            _fast_mode(fast_mode)
     {
         _map_volume = local_size.x * local_size.y * local_size.z;
         _max_width = local_size.x + local_size.y + local_size.z;
@@ -50,7 +51,12 @@ public:
         _wave_range.x = (((0xffffffff) >> XSHIFT) & XMASK)-1; // even numbers
         _wave_range.y = (((0xffffffff) >> YSHIFT) & YMASK)-1;
         _wave_range.z = (((0xffffffff) >> ZSHIFT) & ZMASK)-1;
-        printf("Local Map initialized\n");
+        if (_max_width>= _wave_range.x || _max_width>= _wave_range.y || _max_width>= _wave_range.z)
+        {
+            printf("Local map size too big!!!\n");
+            assert(false);
+        }
+        INVALID_LOC_COC = int3{_wave_range.x-1, _wave_range.y-1, _wave_range.z-1};
     }
 
     void create_gpu_map()
@@ -68,8 +74,8 @@ public:
         GPU_MALLOC(&_g, _map_volume*sizeof(int));
         GPU_MALLOC(&_s, _map_volume*sizeof(int));
         GPU_MALLOC(&_t, _map_volume*sizeof(int));
-        GPU_MALLOC(&_coc, sizeof(int3)*_map_volume);
-        GPU_MALLOC(&_aux_coc, sizeof(int3)*_map_volume);
+        GPU_MALLOC(&_coc_idx, sizeof(int)*_map_volume);
+        GPU_MALLOC(&_coc_idx_aux, sizeof(int)*_map_volume);
 
         GPU_MALLOC(&_loc_wave_layer, sizeof(int)*_map_volume);
 
@@ -78,6 +84,8 @@ public:
         glb_type_H = new char[_map_volume];
         edt_H = new float[_map_volume];
         seendist_out = new SeenDist[_map_volume];
+
+        printf("Local Map initialized\n");
     }
 
     void delete_gpu_map()
@@ -86,13 +94,13 @@ public:
         GPU_FREE(_inst_type);
         GPU_FREE(_glb_type);
         GPU_FREE(_edt_D);
-//        GPU_FREE(_reged);
         GPU_FREE(_g);
         GPU_FREE(_s);
         GPU_FREE(_t);
         GPU_FREE(_aux);
-        GPU_FREE(_coc);
-        GPU_FREE(_aux_coc);
+        GPU_FREE(_coc_idx);
+        GPU_FREE(_coc_idx_aux);
+
         GPU_FREE(_loc_wave_layer);
         GPU_FREE(_dist_id_pair);
 
@@ -198,6 +206,34 @@ public:
         idx_1d = (((coc_in_wr.x) << XSHIFT) | ((coc_in_wr.y) << YSHIFT) | ((coc_in_wr.z) << ZSHIFT));
         return  idx_1d;
     }
+
+
+    // todo: redundant! delete it after the development.
+    __device__ __host__
+    int3 idx2loc_coc(const int &idx_1d)
+    {
+        int3 coc_loc;
+        coc_loc.x = (((idx_1d) >> XSHIFT) & XMASK);
+        coc_loc.y = (((idx_1d) >> YSHIFT) & YMASK);
+        coc_loc.z = (((idx_1d) >> ZSHIFT) & ZMASK);
+
+        return coc_loc;
+    }
+    __device__ __host__
+    int loc_coc2idx(const int3 &loc_coc)
+    {
+        int idx_1d;
+        // todo: assert loc_coc inside local range
+        if(!is_inside_wave_range(loc_coc))
+        {
+            printf("debug here: coc not valid\n");
+            assert(false);
+        }
+        idx_1d = (((loc_coc.x) << XSHIFT) | ((loc_coc.y) << YSHIFT) | ((loc_coc.z) << ZSHIFT));
+        return  idx_1d;
+    }
+
+
 
     __device__ __host__
     int coc_glb2id(const int3 &coc_glb)
@@ -341,48 +377,7 @@ public:
         GPU_MEMCPY_D2H(edt_H,_edt_D,sizeof(float)*_map_volume);
     }
 
-    __device__
-    int get_bdr_idx(const int& face,const int3& cur_buf_crd)
-    {
 
-        switch (face) {
-            case 0:
-                return cur_buf_crd.z*_local_size.y+cur_buf_crd.y;
-            case 1:
-                return cur_buf_crd.z*_local_size.y+cur_buf_crd.y+_local_size.y*_local_size.z;
-            case 2:
-                return cur_buf_crd.z*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z;
-            case 3:
-                return cur_buf_crd.z*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+_local_size.x*_local_size.z;
-            case 4:
-                return cur_buf_crd.y*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+2*_local_size.x*_local_size.z;
-            case 5:
-                return cur_buf_crd.y*_local_size.x+cur_buf_crd.x+2*_local_size.y*_local_size.z+2*_local_size.x*_local_size.z+_local_size.x*_local_size.y;
-            default:
-                printf("wrong face!\n");
-                return -1;
-        }
-    }
-
-    __device__
-    int decide_bdr_face(const int3& cur_buf_crd)
-    {
-        if(cur_buf_crd.x ==0)
-        {
-            return 0;
-        }else if (cur_buf_crd.x == _local_size.x-1) {
-            return 1;
-        }else if (cur_buf_crd.y == 0) {
-            return 2;
-        }else if (cur_buf_crd.y == _local_size.y-1) {
-            return 3;
-        }else if (cur_buf_crd.z == 0) {
-            return 4;
-        }else if (cur_buf_crd.z == _local_size.z-1) {
-            return 5;
-        }
-        return -1;
-    }
 
     void convertCostMap()
     {
@@ -442,23 +437,27 @@ public:
         return _t[id(x,y,z,phase)];
     }
 
+
     //---
     __device__
-    int3& coc(int x, int y, int z)
+    int& coc_idx(int x, int y, int z, int phase)
     {
-        int idx_1d = id(x,y,z,0);
-        if(idx_1d>_map_volume)
-            assert(false);
-        return _coc[idx_1d];
+        int idx_1d = id(x,y,z,phase);
+        return _coc_idx[idx_1d];
     }
 
     __device__
-    int3& coc_aux(int x, int y, int z)
+    int& coc_idx_aux(int x, int y, int z, int phase)
     {
-        int idx_1d = id(x,y,z,0);
-        if(idx_1d>_map_volume)
-            assert(false);
-        return _aux_coc[idx_1d];
+        int idx_1d = id(x,y,z,phase);
+        return _coc_idx_aux[idx_1d];
+    }
+
+    __device__
+    int3 get_coc_viaID(int x, int y, int z, int phase, bool is_aux)
+    {
+        int rt_idx = is_aux?coc_idx_aux(x, y, z, phase):coc_idx(x, y, z, phase);
+        return idx2loc_coc(rt_idx);
     }
 
     __device__
@@ -549,8 +548,8 @@ public:
     int *_g;
     int *_s;
     int *_t;
-    int3 *_coc;
-    int3 *_aux_coc;
+    int *_coc_idx;
+    int *_coc_idx_aux;
 
     // for motion planner
     int3 _half_shift;
@@ -559,11 +558,14 @@ public:
 
     // for wave
     int * _loc_wave_layer;
-    int _cutoff_grids_sq;
     Dist_id *_dist_id_pair;
+    int _cutoff_grids_sq;
+    bool _fast_mode;
 
     int3 _wave_range;
+    int3 INVALID_LOC_COC;
     int3 _update_pvt;
+
 };
 
 #endif //SRC_LOCAL_BATCH_H

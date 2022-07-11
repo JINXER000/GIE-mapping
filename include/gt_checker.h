@@ -70,7 +70,7 @@ public:
     if(rms_cnt>=10)
     {
       float rms_average=rms_sum/rms_cnt;
-      printf("max_error is %f, more cnt is %d, less cnt is %d, rms_err is %f\n",max_err, m_cnt,l_cnt,rms_average);
+      printf("max_error is %f,  rms_err is %f\n",max_err,rms_average);
       rms_sum=0;
       rms_cnt=0;
     }

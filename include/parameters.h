@@ -15,7 +15,7 @@ struct Parameters
 
 //    display option
     bool display_loc_edt ;
-    bool display_occ ;
+    bool display_loc_ogm ;
 
     // profile
     bool profile_loc_rms;
@@ -40,6 +40,8 @@ struct Parameters
     // local volume size (m)
     float local_size_x, local_size_y, local_size_z;
     float ogm_min_h, ogm_max_h;
+
+    bool fast_mode;
     // stop propagate if dist is greater
     float cutoff_dist;
     int cutoff_grids_sq;
@@ -62,7 +64,7 @@ struct Parameters
         nh.param<bool>("GIE_mapping/display_glb_edt",display_glb_edt,true);
         nh.param<bool>("GIE_mapping/display_glb_ogm",display_glb_ogm,true);
         nh.param<bool>("GIE_mapping/display_loc_edt",display_loc_edt,true);
-        nh.param<bool>("GIE_mapping/display_occ",display_occ,false);
+        nh.param<bool>("GIE_mapping/display_loc_ogm",display_loc_ogm,false);
         nh.param<bool>("GIE_mapping/profile_loc_rms",profile_loc_rms,false);
         nh.param<bool>("GIE_mapping/profile_glb_rms",profile_glb_rms,false);
         nh.param<int>("GIE_mapping/vis_interval",vis_interval,1);
@@ -77,7 +79,10 @@ struct Parameters
 
         nh.param<float>("GIE_mapping/ogm/min_height",ogm_min_h,0);
         nh.param<float>("GIE_mapping/ogm/max_height",ogm_max_h,10);
+
+        nh.param<float>("GIE_mapping/ugv_height",ugv_height,-1);
         // wavefront
+        nh.param<bool>("GIE_mapping/wave/fast_mode", fast_mode, false);
         nh.param<float>("GIE_mapping/wave/cutoff_dist",cutoff_dist,6);
         cutoff_grids_sq = flt2GridsSq(cutoff_dist);
 
