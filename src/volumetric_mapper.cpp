@@ -79,33 +79,33 @@ VOLMAPNODE::VOLMAPNODE()
     {
         _occ_rviz_pub = _nh.advertise<PntCldI>("occ_map",1);
         _occ_pnt_cld = PntCldI::Ptr(new PntCldI);
-        _occ_pnt_cld->header.frame_id = "/map";
+        _occ_pnt_cld->header.frame_id = "map";
     }
 
     if (param.display_loc_edt)
     {
         _edt_rviz_pub = _nh.advertise<PntCldI>("edt_map",1);
         _edt_pnt_cld = PntCldI::Ptr(new PntCldI);
-        _edt_pnt_cld->header.frame_id = "/map";
+        _edt_pnt_cld->header.frame_id = "map";
     }
 
     if(param.display_glb_edt)
     {
         _glb_edt_rviz_pub = _nh.advertise<PntCldI>("glb_edt_map", 1);
         _glb_edt_pnt_cld = PntCldI ::Ptr(new PntCldI);
-        _glb_edt_pnt_cld->header.frame_id = "/map";
+        _glb_edt_pnt_cld->header.frame_id = "map";
     }
 
     if(param.display_glb_ogm)
     {
         _glb_ogm_rviz_pub = _nh.advertise<PntCld>("glb_ogm_map", 1);
         _glb_ogm_pnt_cld = PntCld ::Ptr(new PntCld);
-        _glb_ogm_pnt_cld->header.frame_id = "/map";
+        _glb_ogm_pnt_cld->header.frame_id = "map";
     }
 
     _dbg_rviz_pub =  _nh.advertise<PntCldI>("dbg_pt", 1);
     _dbg_pnt_cld = PntCldI ::Ptr(new PntCldI);
-    _dbg_pnt_cld->header.frame_id = "/map";
+    _dbg_pnt_cld->header.frame_id = "map";
 
     if(param.for_motion_planner)
         setupEDTmsg4Motion(cost_map_msg, _loc_map, true);

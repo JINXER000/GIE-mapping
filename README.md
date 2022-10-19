@@ -56,7 +56,7 @@ Please cite our paper if you use this project in your research:
 # Installation
 ## Prerequisite
 1. This project runs CUDA and requires a computer with **Nvidia GPU**. We have successfully tested this project on CUDA 9.0, 10.2, 11.3 and 11.4.
-2. Install Ubuntu with ROS. This project has been tested on Ubuntu 16.04(ROS Kinetic) and 18.04(ROS Melodic). 
+2. Install Ubuntu with ROS. This project has been tested on Ubuntu 16.04 (ROS Kinetic), 18.04 (ROS Melodic) and 20.04 (ROS Noetic). 
 ## Recompile cuTT 
 cuTT is a library used for faster batch EDT. 
 ````bash
@@ -85,6 +85,7 @@ mkdir GIE_ws & cd GIE_ws
 mkdir src & cd src
 git clone https://github.com/JINXER000/GIE-mapping.git
 cd ..
+sudo chmod 777 ./CMakeLists.txt
 catkin_make
 source devel/setup.bash
 ```
@@ -176,6 +177,9 @@ The system extracts low-level frontiers for exploration. The data type of **VOXT
 
 ### Signed distance 
 Developing
+
+# Trouble shooting
+As reported in  [issue 1](https://github.com/JINXER000/GIE-mapping/issues/1), there might be some problems in launching the mapper with Ubuntu 20.04. Please ensure that the GPU model, GPU driver version, and CUDA version match with each other. For more details, you can refer to [this website](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/). And it is recommend to activate C++ 14 in CMake when using 20.04. 
 
 
 # Change log

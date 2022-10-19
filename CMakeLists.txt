@@ -3,6 +3,8 @@ project(GIE)
 
 # Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
+# use this when the system is 20.04
+# set(CMAKE_CXX_STANDARD 14)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
