@@ -178,6 +178,51 @@ The system extracts low-level frontiers for exploration. The data type of **VOXT
 ### Signed distance 
 Developing
 
+# Docker Support
+
+To make the installation and development of GIE-mapping easier, the docker-based installation is introduced. Users only need to pull the image from [docker hub](hub.docker.com), and use the provided scripts to finish the installation easily.
+
+## Docker installation
+Users can follow the simplified instructions below or follow the [Official instruction](https://docs.docker.com/engine/install/ubuntu/) and [Post-installation steps for Linux](https://docs.docker.com/engine/install/linux-postinstall/).
+1. Downloads the script from get.docker.com and runs it to install the latest stable release of Docker on Linux
+    ```bash
+    curl -fsSL get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+    ```
+2. Create the docker group
+    ```bash
+    sudo groupadd docker
+    ```
+3. Add your user to the docker group
+    ```bash
+    sudo usermod -aG docker $USER
+    ```
+4. Log out and log back in so that your group membership is re-evaluated.
+
+    On a desktop Linux environment such as X Windows, log out of your session completely and then log back in.
+
+    On Linux, you can also run the following command to activate the changes to groups:
+    ```bash
+    newgrp docker 
+    ```
+
+5. Verify that you can run docker commands without sudo
+    ```bash
+    docker run hello-world
+    ```
+## GIE-mapping installation
+Thanks to the properties of Docker, the installation is very straightforward. Users only need to clone the installation script from the repo and run it in Host BASH and Docker BASH respectively. Then, all the installation steps will be finished.
+
+```bash
+git clone https://github.com/ryrobotics/USR_Docker.git
+mkdir -p ~/GIE_src
+cp ./USR_Docker/ROS-melodic-Xavier/GIE_Dokcer_Install.sh ~/GIE_src/
+cd ~/GIE_src
+sh GIE_Dokcer_Install.sh host
+# Run in the bash of Docker
+sh /src/GIE_Dokcer_Install.sh docker
+```
+
 # Trouble shooting
 As reported in  [issue 1](https://github.com/JINXER000/GIE-mapping/issues/1), there might be some problems in launching the mapper with Ubuntu 20.04. Please ensure that the GPU model, GPU driver version, and CUDA version match with each other. For more details, you can refer to [this website](https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/). And it is recommend to activate C++ 14 in CMake when using 20.04. 
 

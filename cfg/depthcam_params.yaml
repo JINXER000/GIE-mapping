@@ -11,7 +11,7 @@ vis_height: 1
 # profile the rms every time the visualization msg is published
 profile_loc_rms: false
 profile_glb_rms: false
-log_dir: "/home/joseph/test.csv"
+log_dir: "/src/GIE_ws/GIE_log/test.csv"
 
 occupancy_threshold: 180
 
