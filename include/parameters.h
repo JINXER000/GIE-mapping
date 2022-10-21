@@ -2,6 +2,7 @@
 #ifndef SRC_PARAMETERS_H
 #define SRC_PARAMETERS_H
 #include <ros/ros.h>
+#include <ros/package.h>
 // user defines for developer
 
 /*!
@@ -21,7 +22,10 @@ struct Parameters
     bool profile_loc_rms;
     bool profile_glb_rms ;
 
-    std::string  log_dir = "/home/joseph/GIE_log.csv";
+    // for profiling
+    std::string  log_name = "GIE_log.csv";
+    std::string  log_dir = "";
+
     // incoming data case
     std::string data_case = "depth_cam";
 
@@ -94,7 +98,9 @@ struct Parameters
         nh.param<int>("GIE_mapping/hash/block_max",max_block,19997);
 
         // logger
-        nh.getParam("GIE_mapping/log_dir", log_dir);
+        nh.getParam("GIE_mapping/log_name", log_name);
+        log_dir = ros::package::getPath("GIE")+"/" + log_name;
+        std::cout << "logging path: " <<log_dir <<std::endl;
         // dataset
         nh.getParam("/data_case", data_case);
         std::cout<<"data_case is "<<data_case<<std::endl;

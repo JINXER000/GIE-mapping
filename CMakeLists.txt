@@ -12,6 +12,7 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     rospy
+    roslib
     std_msgs
     nav_msgs
     pcl_conversions
@@ -53,7 +54,7 @@ generate_messages(
 catkin_package(
     INCLUDE_DIRS include ${CUDA_INCLUDE_DIRS}
 #    LIBRARIES ${PROJECT_NAME}
-    CATKIN_DEPENDS roscpp rospy std_msgs message_runtime
+    CATKIN_DEPENDS roscpp rospy std_msgs message_runtime roslib
     #  DEPENDS system_lib
     )
 

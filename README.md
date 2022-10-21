@@ -93,8 +93,6 @@ source devel/setup.bash
 
 ## Launch the mapper
 ### Caution
-- Before launching any examples, please revise the *log_dir* parameter in the corresponding .yaml file
-to your own directory, otherwise an error will be thrown. After every launch, an .csv file will be left at *log_dir* recording the speed and accuracy (if the display and profile options are enabled). 
 - If the local size is too large, an "invalid argument" error will be thrown due to CUDA does not support such a large thread-block.
 - The parameters *bucket_max* and *block_max* has to be increased if you are doing large-scale and fine-resolution mapping. The initialization time may be longer. 
 - The software is being actively updated, and there may be inconsisitency between our paper and the actual implementation. The most updated profiling data can be viewed in our [supplementary video](https://youtu.be/1g4AnkHAiZ8).
@@ -155,7 +153,7 @@ Remember to set *use_sim_time* parameter in each launch file as **false** in the
 - Turn off Rviz during the run since it will occupy a large amount of GPU resources.
 - Disable both *display_glb_edt* and *display_glb_ogm* parameter. Hence the GPU hash table won't be streamed to CPU at every iteration.
 - Decrease the parameter *cutoff_dist* to a small number (e.g., 2m).
-- Turn on *fast_mode* parameter. It will disable wavefront A and wavefront B (please see details in our [paper](https://ieeexplore.ieee.org/abstract/document/9782137)). The accuracy is nearly the same as the original mode in confined space, e.g., in Cow-Lady dataset.
+- Turn on *fast_mode* parameter. It will disable wavefront A and wavefront B (please see details in our [paper](https://ieeexplore.ieee.org/abstract/document/9782137)). If working in confined space, (e.g., Cow-Lady dataset), the accuracy is nearly the same as the original mode.
 
 ### Integrate with motion planners
 Please set *for_motion_planner* parameter as true. It makes the current robot position valid and observed.
@@ -180,7 +178,7 @@ Developing
 
 # Docker Support
 
-To make the installation and development of GIE-mapping easier, the docker-based installation is introduced. Users only need to pull the image from [docker hub](hub.docker.com), and use the provided scripts to finish the installation easily.
+To make the installation and development of GIE-mapping easier, the docker-based installation is introduced for Nvidia Xavier NX. Users only need to pull the image from [docker hub](hub.docker.com), and use the provided scripts to finish the installation easily.
 
 ## Docker installation
 Users can follow the simplified instructions below or follow the [Official instruction](https://docs.docker.com/engine/install/ubuntu/) and [Post-installation steps for Linux](https://docs.docker.com/engine/install/linux-postinstall/).
@@ -228,6 +226,9 @@ As reported in  [issue 1](https://github.com/JINXER000/GIE-mapping/issues/1), th
 
 
 # Change log
+### Oct 21, 2022
+- Add Docker support
+- Remove hard-code logging directory. 
 ### June 24, 2022
 - Add support for 16-line 3D LiDAR.
 - Fix some bugs.
