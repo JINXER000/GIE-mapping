@@ -169,7 +169,8 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
                                           param.for_motion_planner, param.robot_r2_grids);
         }else
         {
-            _pnt_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time);
+            _pnt_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time,
+                                          param.for_motion_planner, param.robot_r2_grids);
         }
     }
 

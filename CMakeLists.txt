@@ -103,5 +103,11 @@ target_link_libraries(
         ${catkin_LIBRARIES}
         ${CUDA_LIBRARIES}
 )
-target_link_libraries(${PROJECT_NAME}_node cutt cudadevrt)
+IF(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
+    target_link_libraries(${PROJECT_NAME}_node cutt_arm cudadevrt_arm)
+    message("link with cutt_arm")
+ELSE(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
+    target_link_libraries(${PROJECT_NAME}_node cutt_x86 cudadevrt_x86)
+    message("link with cutt_x86")
+ENDIF(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
 

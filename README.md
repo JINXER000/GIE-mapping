@@ -4,7 +4,7 @@
 
 Source code for the paper: **GPU-accelerated Incremental Euclidean Distance Transform for Online Motion Planning of Mobile Robots**
 
-This work has been accepted by IEEE Robotics and Automation Letters 2022 and will be presented in IROS 2022, Kyoto.
+This work has been accepted by IEEE Robotics and Automation Letters 2022 and was presented in IROS 2022, Kyoto.
 
 This software is a volumetric mapping
 system that effectively calculates Occupancy Grid Maps (OGMs)

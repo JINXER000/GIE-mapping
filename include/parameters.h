@@ -27,7 +27,7 @@ struct Parameters
     std::string  log_dir = "";
 
     // incoming data case
-    std::string data_case = "depth_cam";
+    std::string data_case = "ugv_corridor";
 
     // if the CPU hash table is maintained
     bool display_glb_edt;
@@ -84,7 +84,6 @@ struct Parameters
         nh.param<float>("GIE_mapping/ogm/min_height",ogm_min_h,0);
         nh.param<float>("GIE_mapping/ogm/max_height",ogm_max_h,10);
 
-        nh.param<float>("GIE_mapping/ugv_height",ugv_height,-1);
         // wavefront
         nh.param<bool>("GIE_mapping/wave/fast_mode", fast_mode, false);
         nh.param<float>("GIE_mapping/wave/cutoff_dist",cutoff_dist,6);
@@ -99,7 +98,7 @@ struct Parameters
 
         // logger
         nh.getParam("GIE_mapping/log_name", log_name);
-        log_dir = ros::package::getPath("GIE")+"/" + log_name;
+       log_dir = ros::package::getPath("GIE")+"/" + log_name;
         std::cout << "logging path: " <<log_dir <<std::endl;
         // dataset
         nh.getParam("/data_case", data_case);
