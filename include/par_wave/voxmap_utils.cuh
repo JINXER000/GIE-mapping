@@ -56,7 +56,6 @@ struct CrdLessThan
                         (a.z < b.z)))));
     }
 };
-
 struct CrdEqualTo
 {
     __device__ __host__
@@ -198,6 +197,13 @@ void set_hashvoxel_occ_val(GlbVoxel* glb_vox, float val, float low_pass_param, u
         glb_vox->vox_type = VOXTYPE_OCCUPIED;
     else
         glb_vox->vox_type = VOXTYPE_FREE;
+}
+
+__device__ __forceinline__
+bool insideAABB(float3 pt, float3 ll, float3 ur)
+{
+    bool inside =( pt.x>= ll.x && pt.y >=ll.y && pt.z >=ll.z) && (pt.x <= ur.x && pt.y <= ur.y && pt.z <= ur.z);
+    return  inside;
 }
 
 #endif

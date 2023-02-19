@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+    <param name="use_sim_time" value="true"/>
+    <param name="data_case" value="ugv_corridor"/>
+    <node pkg="GIE" type="GIE_node" name="GIE_mapping" output="screen" >
+        <rosparam command="load" file="uav_laser3D_fine_params.yaml" />
+        <remap from="/LaserOdomTopic" to ="/Odometry"/>
+<!--        <remap from="/rslidar_points" to ="/ouster/points"/>-->
+        <remap from="/rslidar_points" to ="/mid_360/points"/>
+    </node>
+
+    <node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0 map camera_init 100" />
+    <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find GIE)/cfg/flio.rviz" />
+</launch>
+

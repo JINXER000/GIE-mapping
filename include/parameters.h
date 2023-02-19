@@ -57,6 +57,11 @@ struct Parameters
 
     // for cow-lady: T_V_C (C = cam0, V = vicon marker)
     Eigen::Matrix4d T_V_C;
+
+    // pre-defined obs
+    std::vector<float3> obsbbx_ll, obsbbx_ur;
+    bool is_ext_obsv_3D;
+
     /**
      * Load all parameters
      * @param nh
@@ -88,7 +93,7 @@ struct Parameters
         nh.param<bool>("GIE_mapping/wave/fast_mode", fast_mode, false);
         nh.param<float>("GIE_mapping/wave/cutoff_dist",cutoff_dist,6);
         cutoff_grids_sq = flt2GridsSq(cutoff_dist);
-
+        
         nh.param<float>("GIE_mapping/robot_r",robot_r,0.2);
         robot_r2_grids = flt2GridsSq(robot_r);
 
@@ -111,6 +116,19 @@ struct Parameters
                     -0.180038, 0.196415, 0.96385, 0.0430765,
                     0.0, 0.0, 0.0, 1.0;
         }
+
+        nh.param<bool>("GIE_mapping/is_ext_obsv_3D",is_ext_obsv_3D,false);
+        // hard code of ext obs
+        obsbbx_ll.resize(4);
+        obsbbx_ur.resize(4);
+        obsbbx_ll[0] = make_float3(-3.6, -3.2, 0.2);
+        obsbbx_ur[0] = make_float3(4.4,3.4,2.6);
+        obsbbx_ll[1] = make_float3(-3.4, -3, 0.2);
+        obsbbx_ur[1] = make_float3(-2.2,-2.2,2.6);
+        obsbbx_ll[2] = make_float3(2.2, -3.2, 0.2);
+        obsbbx_ur[2] = make_float3(4.0,-1.6,2.6);
+        obsbbx_ll[3] = make_float3(-0.8, 1.2, 0.2);
+        obsbbx_ur[3] = make_float3(-0.2,3.0,2.6);
     }
 
     int flt2GridsSq(float rad)

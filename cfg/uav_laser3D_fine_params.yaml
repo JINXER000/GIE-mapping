@@ -1,10 +1,12 @@
 for_motion_planner: true
+robot_r: 0.6
+
 display_loc_edt: true
 display_loc_ogm: false
 display_glb_edt: false
 display_glb_ogm: true
 vis_interval: 1
-vis_height: 0.5
+vis_height: 0.8
 
 # profile the rms every time the visualization msg is published
 profile_loc_rms: false
@@ -15,13 +17,13 @@ occupancy_threshold: 180
 
 voxel_width: 0.20
 
-local_size_x: 16
-local_size_y: 16
-local_size_z: 2
+local_size_x: 10
+local_size_y: 10
+local_size_z: 3
 
 ogm:
   min_height: 0.2
-  max_height: 2
+  max_height: 3
 
 wave:
   fast_mode: true
@@ -29,7 +31,7 @@ wave:
 
 # params of hash table
 hash:
+  bucket_max: 10000
+  block_max: 11997
 
-  bucket_max: 20000
-
-  block_max: 21997
+is_ext_obsv_3D: false

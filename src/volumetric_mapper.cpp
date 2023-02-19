@@ -11,11 +11,15 @@ VOLMAPNODE::VOLMAPNODE()
     // Publisher
     edt_msg_pub = _nh.advertise<GIE::CostMap> ("cost_map", 1);
 
+    ext_obs = new Ext_Obs_Wrapper(param.obsbbx_ur.size());
+    ext_obs->assign_obs_premap(param.obsbbx_ll, param.obsbbx_ur);
+//    ext_obs->bbx_H2D();
+
     // Subscriber
     if(param.data_case == "ugv_corridor" )
     {
-        s_odom_sub.subscribe(_nh,"/LaserOdomTopic", 1);
-        s_pntcld_sub.subscribe(_nh,"/rslidar_points", 1);
+       s_odom_sub.subscribe(_nh,"/LaserOdomTopic", 1);
+       s_pntcld_sub.subscribe(_nh,"/rslidar_points", 1);
         pntcld_sync = new message_filters::Synchronizer<pntcld_sync_policy> (pntcld_sync_policy(30), s_pntcld_sub, s_odom_sub);
         pntcld_sync->setMaxIntervalDuration(ros::Duration(0.1));
         pntcld_sync->registerCallback(boost::bind(&VOLMAPNODE::CB_pntcld_odom,this,_1,_2));
@@ -45,12 +49,15 @@ VOLMAPNODE::VOLMAPNODE()
         laser2D_sync->registerCallback(boost::bind(&VOLMAPNODE::CB_scan_odom,this,_1,_2));
     }else if(param.data_case == "laser3D")
     {
-        s_odom_sub.subscribe(_nh,"/ground_truth/state", 1);
+        s_odom_sub.subscribe(_nh,"/odom", 1);
         s_pntcld_sub.subscribe(_nh,"/velodyne_points", 1);
         pntcld_sync = new message_filters::Synchronizer<pntcld_sync_policy> (pntcld_sync_policy(30), s_pntcld_sub, s_odom_sub);
         pntcld_sync->setMaxIntervalDuration(ros::Duration(0.1));
         pntcld_sync->registerCallback(boost::bind(&VOLMAPNODE::CB_pntcld_odom,this,_1,_2));
     }
+
+    // receive external knowledge form pyntcld
+    ext_cld_sub = _nh.subscribe("/forbid_reg_cloud", 1, &VOLMAPNODE::CB_ext_cld, this);
 
 
     // Normal initialization
@@ -143,11 +150,6 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
         proj.origin.z = param.ugv_height;
     }
 
-    if(mtx.try_lock() == false)
-    {
-        printf("!!!Please decrease frequency!!!\n");
-        assert(false);
-    }
     auto start = std::chrono::steady_clock::now();
     _loc_map->calculate_pivot_origin(proj.origin);
     _loc_map->calculate_update_pivot(proj.origin);
@@ -174,7 +176,11 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
         }
     }
 
-    _hash_map->updateHashOGM(_msg_mgr.got_pnt_cld  && param.data_case != "laser3D", _time,param.display_glb_ogm && !param.display_glb_edt);
+    update_ext_map();
+
+    _hash_map->updateHashOGM(_msg_mgr.got_pnt_cld  && param.data_case != "laser3D",
+                             _time,param.display_glb_ogm && !param.display_glb_edt,
+                             ext_obs);
 
 
     GPU_DEV_SYNC(); // only for profiling
@@ -196,7 +202,6 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
     (*logger)<<(float)edt_duration;
     std::cout << "OGM time: "<< ogm_duration<< "ms; Global EDT time: "<< edt_duration<< " ms" << std::endl;
 
-    mtx.unlock();
 
     if(param.for_motion_planner)
     {
@@ -229,7 +234,7 @@ tf::Transform VOLMAPNODE::odom2trans()  {
                                 _odom_ptr->pose.pose.position.y,
                                 _odom_ptr->pose.pose.position.z));
 
-    br.sendTransform(tf::StampedTransform(trans, cur_stamp, "map", "laser0"));
+    br.sendTransform(tf::StampedTransform(trans, cur_stamp, "map", "laser_3d"));
     if (param.data_case == "cow_lady")
     {
         // transform correction
@@ -383,3 +388,124 @@ void VOLMAPNODE::setupEDTmsg4Motion(GIE::CostMap &msg, LocMap* loc_map, bool res
     msg.type = GIE::CostMap::TYPE_EDT;
 }
 
+void VOLMAPNODE::clustring(const sensor_msgs::PointCloud2::ConstPtr& msg)
+{
+    // TODO: below is to reset the obs to premap
+    ext_obs->assign_obs_premap(param.obsbbx_ll, param.obsbbx_ur);
+
+    pcl::fromROSMsg(*msg, ext_cloud);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr input_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    for (int i = 0; i < ext_cloud.size(); i++)
+    {
+        input_cloud->push_back(ext_cloud.points[i]);
+    }
+    input_cloud->header = ext_cloud.header;
+
+    // construct KD tree
+    if (input_cloud->points.size() != 0) {
+
+        pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(new pcl::search::KdTree<pcl::PointXYZ>);
+        kdtree->setInputCloud(input_cloud);
+
+        /* DBSCAN param*/
+        int min_nbrPts = 3;
+        double search_rad = 0.3;
+        std::vector<pcl::PointIndices> clustered_indices;
+        std::vector<int> pts_type(input_cloud->points.size(), 0);    // not proc-0；under proc-1；finished-2；
+        std::vector<int> nbrs_idx;
+        std::vector<float> nbrs_distance;
+
+
+        for (int i = 0; i < input_cloud->points.size(); i++) {
+            if (pts_type[i] == 2) { continue; }
+
+            int nbrs_size = kdtree->radiusSearch(i, search_rad, nbrs_idx, nbrs_distance);
+
+            std::vector<int> seed_queue;
+            seed_queue.push_back(i);
+            pts_type[i] = 2;
+            for (int j = 0; j < nbrs_size; j++) {
+                if (nbrs_idx[j] != i)
+                {
+                    seed_queue.push_back(nbrs_idx[j]);
+                    pts_type[nbrs_idx[j]] = 1;
+                }
+            }
+
+            int sq_idx = 1;
+            while (sq_idx < seed_queue.size()) {
+                int pt_idx = seed_queue[sq_idx];
+                if (pts_type[pt_idx] == 2)
+                {
+                    sq_idx++;
+                    continue;
+                }
+                nbrs_size = kdtree->radiusSearch(pt_idx, search_rad, nbrs_idx, nbrs_distance);
+                if (nbrs_size >= min_nbrPts)
+                {
+                    for (int j = 0; j < nbrs_size; j++) {
+                        if (pts_type[nbrs_idx[j]] == 0) {
+                            seed_queue.push_back(nbrs_idx[j]);
+                            pts_type[nbrs_idx[j]] = 1;
+                        }
+                    }
+                }
+                pts_type[pt_idx] = 2;
+                sq_idx++;
+            }
+
+            pcl::PointIndices pt_idc;
+            if (seed_queue.size() >= 4) {
+                pt_idc.indices.resize(seed_queue.size());
+                for (int j = 0; j < seed_queue.size(); j++) {
+                    pt_idc.indices[j] = seed_queue[j];
+                }
+                pt_idc.header = input_cloud->header;
+                clustered_indices.push_back(pt_idc);
+            }
+        }
+
+        int j = 0;
+        for (std::vector<pcl::PointIndices>::const_iterator it = clustered_indices.begin(); it !=  clustered_indices.end(); it++,j++) {
+            pcl::PointCloud<pcl::PointXYZ>::Ptr cluster_pts(new pcl::PointCloud<pcl::PointXYZ>);
+            for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); ++pit)
+            {
+                cluster_pts->points.push_back(input_cloud->points[*pit]);
+            }
+            cluster_pts->header = input_cloud->header;
+
+            feature_extractor.setInputCloud(cluster_pts);
+            feature_extractor.compute();
+            pcl::PointXYZ min_point_AABB;
+            pcl::PointXYZ max_point_AABB;
+            feature_extractor.getAABB(min_point_AABB, max_point_AABB);
+
+
+            float min_z = param.is_ext_obsv_3D ? min_point_AABB.z : 0.2;
+            float max_z = param.is_ext_obsv_3D ? max_point_AABB.z : 2.6;
+            float3 ll_coord{min_point_AABB.x, min_point_AABB.y, min_z};
+            float3 ur_coord{max_point_AABB.x, max_point_AABB.y, max_z};
+            ext_obs->append_new_elem(ll_coord, ur_coord);
+        }
+    }
+}
+
+void VOLMAPNODE::CB_ext_cld(const sensor_msgs::PointCloud2::ConstPtr& msg)
+{
+    clustring(msg);
+}
+
+void VOLMAPNODE::update_ext_map()
+{
+    float3 loc_map_ll = _loc_map->_msg_origin;
+    float3 loc_map_ur  = make_float3(loc_map_ll.x + param.local_size_x,
+                                     loc_map_ll.y + param.local_size_y,
+                                     loc_map_ll.z + param.local_size_z);
+
+    // construct ext obs map
+    ext_obs->activate_AABB(loc_map_ll, loc_map_ur);
+
+//    ext_obs->constructPreOGM(_og_map, _edt_map->_pvt, _time);
+
+
+}

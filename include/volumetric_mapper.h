@@ -30,6 +30,17 @@
 #include "map_structure/local_batch.h"
 #include <tf/transform_broadcaster.h>
 
+#include "map_structure/pre_map.h"
+
+
+/* PCL头文件 */
+#include <pcl/point_cloud.h>
+#include <pcl/common/common.h>
+#include <pcl/common/centroid.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/features/moment_of_inertia_estimation.h>
+
 class VOLMAPNODE
 {
     typedef pcl::PointCloud<pcl::PointXYZ> PntCld;
@@ -70,6 +81,11 @@ private:
     tf::Transform odom2trans();
     void setupEDTmsg4Motion(GIE::CostMap &msg, LocMap* loc_map, bool resize);
 
+
+    void clustring(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void CB_ext_cld(const sensor_msgs::PointCloud2::ConstPtr& msg);
+    void update_ext_map();
+
 private:
     ros::NodeHandle _nh;
     ros::Subscriber _caminfo_sub;
@@ -97,6 +113,9 @@ private:
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::LaserScan, nav_msgs::Odometry> laser2D_sync_policy;
     message_filters::Synchronizer<laser2D_sync_policy> *laser2D_sync;
 
+    // receive external knowledge form pyntcld
+    ros::Subscriber ext_cld_sub;
+
     ros::Timer _mapTimer;
     ros::Publisher edt_msg_pub;
     GIE::CostMap cost_map_msg;
@@ -112,6 +131,7 @@ private:
     boost::shared_ptr<nav_msgs::Odometry>  _odom_ptr;
     boost::shared_ptr<sensor_msgs::Image> _depth_ptr;
     boost::shared_ptr<sensor_msgs::PointCloud2> _pntcld_ptr;
+    pcl::PointCloud<pcl::PointXYZ> ext_cloud;
 
 
     // glb EDT
@@ -141,8 +161,6 @@ private:
     // input from ros
     Parameters param;
 
-    // mutex
-    std::mutex mtx;
 
     // profiler
     csvfile *logger;
@@ -151,6 +169,14 @@ private:
     // for tf pub
     tf::TransformBroadcaster br;
     ros::Time cur_stamp;
+
+    // Ext_Obs_Wrapper
+    Ext_Obs_Wrapper *ext_obs;
+
+    /* PCL包围盒计算 */
+    pcl::MomentOfInertiaEstimation<pcl::PointXYZ> feature_extractor;
+
+
 
     void publish_local_ptcld_2_rviz()
     {
