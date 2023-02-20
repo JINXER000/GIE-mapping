@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+    <param name="use_sim_time" value="true"/>
+    <param name="data_case" value="depth_cam"/>
+    <group ns="iris_0">
+        <node pkg="GIE" type="GIE_node" name="GIE_mapping" output="screen">
+            <rosparam command="load" file="$(find GIE)/cfg/depthcam_params.yaml" />
+            <remap from="/iris_0/mavros/local_position/odom" to ="/odom_cvt"/>
+        </node>
+    </group>
+    <node pkg="tf" type="static_transform_publisher" name="world_broadcaster" args="0 0 0 0 0 0 map world 100" />
+    <node pkg="tf" type="static_transform_publisher" name="odom_broadcaster" args="0 0 0 0 0 0 map odom 100" />
+    <node name="rvizvisualisation" pkg="rviz" type="rviz" output="log" args="-d $(find GIE)/cfg/iris_depthcam.rviz" />
+</launch>

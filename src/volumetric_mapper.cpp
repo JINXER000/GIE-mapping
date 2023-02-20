@@ -505,7 +505,4 @@ void VOLMAPNODE::update_ext_map()
     // construct ext obs map
     ext_obs->activate_AABB(loc_map_ll, loc_map_ur);
 
-//    ext_obs->constructPreOGM(_og_map, _edt_map->_pvt, _time);
-
-
 }

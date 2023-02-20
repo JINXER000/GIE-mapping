@@ -1,10 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(GIE)
-
+#set(ROS_BUILD_TYPE Debug)
+#set(CMAKE_BUILD_TYPE Debug)
 # Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
-# use this when the system is 20.04
-# set(CMAKE_CXX_STANDARD 14)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -12,7 +11,7 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
     roscpp
     rospy
-    roslib
+        roslib
     std_msgs
     nav_msgs
     pcl_conversions
@@ -89,6 +88,7 @@ cuda_add_executable(
     src/kernel/edt/local_edt.cu src/vlp16_map_maker.cpp
     src/kernel/vlp16/vlp16_fast.cu
     src/kernel/edt/warmup.cu
+        src/kernel/pre_map/pre_map.cu
 )
 
 add_dependencies(
@@ -103,11 +103,4 @@ target_link_libraries(
         ${catkin_LIBRARIES}
         ${CUDA_LIBRARIES}
 )
-IF(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
-    target_link_libraries(${PROJECT_NAME}_node cutt_arm cudadevrt_arm)
-    message("link with cutt_arm")
-ELSE(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
-    target_link_libraries(${PROJECT_NAME}_node cutt_x86 cudadevrt_x86)
-    message("link with cutt_x86")
-ENDIF(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
-
+target_link_libraries(${PROJECT_NAME}_node cutt cudadevrt)
