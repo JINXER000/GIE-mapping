@@ -9,7 +9,7 @@
 GlbHashMap::GlbHashMap(int bdr_size, int3 loc_dim, int bucket_max, int block_max)
 {
     int loc_volume_size = loc_dim.x*loc_dim.y*loc_dim.z;
-    int max_keys_in_local = (loc_dim.x/VB_WIDTH+1)* (loc_dim.y/VB_WIDTH+1)*(loc_dim.z/VB_WIDTH+1);
+    int max_keys_in_local = (loc_dim.x/VB_WIDTH+2)* (loc_dim.y/VB_WIDTH+2)*(loc_dim.z/VB_WIDTH+2);
     require_alloc_keys_D.resize(max_keys_in_local);
     success_alloc_D.resize(max_keys_in_local+1);
 
