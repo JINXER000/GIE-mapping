@@ -19,7 +19,7 @@ bool clearRayLoc(LocMap &loc_map,const int3 &crd, const float &val1, const float
 
 
 __global__
-void getAllocKeys(LocMap loc_map, int3* VB_keys_loc_D)
+void getAllocKeys(LocMap loc_map, int3* VB_keys_loc_D, bool for_motion_planner, int rbt_r2_grids)
 {
     // get the z and y coordinate of the grid we are about to scan
     int3 loc_crd;
@@ -28,6 +28,18 @@ void getAllocKeys(LocMap loc_map, int3* VB_keys_loc_D)
 
     for (loc_crd.x = 0; loc_crd.x < loc_map._local_size.x; ++loc_crd.x)
     {
+
+        // set grids around as known and free
+        if (for_motion_planner)
+        {
+            int3 crd2center = loc_crd -loc_map._half_shift;
+            if(crd2center.x*crd2center.x + crd2center.y*crd2center.y+crd2center.z*crd2center.z <= rbt_r2_grids)
+            {
+                loc_map.set_vox_count(loc_crd, -1);
+            }
+
+        }
+
         int idx_1d=loc_map.coord2idx_local(loc_crd);
 
         int count = loc_map.get_vox_count(loc_crd);
@@ -64,8 +76,6 @@ void freeLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj, int pnt_sz, in
 
     float3 glb_pos = proj.L2G*pnt_cld[id];
 
-    float3 diff = glb_pos-proj.origin;
-
     RAY::rayCastLoc(loc_map, proj.origin,  glb_pos, time, 0.707f*loc_map._local_size.x*loc_map._voxel_width, &clearRayLoc);
 }
 
@@ -92,9 +102,10 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
 }
 
 
-void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param, int3* VB_keys_loc_D, int time)
+void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param,
+                     int3* VB_keys_loc_D, int time, bool for_motion_planner, int rbt_r2_grids)
 {
-    // Register the point coulds
+    // Register the point clouds
     registerLocObs<<<param.valid_pnt_count/256+1, 256>>>(*loc_map,pnt_cld,proj,param.valid_pnt_count,time);
 
     // Free the empty areas
@@ -102,6 +113,6 @@ void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldPa
 
     const int gridSize = loc_map->_local_size.z;
     const int blkSize = loc_map->_local_size.y;
-    getAllocKeys<<<gridSize,blkSize>>>(*loc_map,VB_keys_loc_D);
+    getAllocKeys<<<gridSize,blkSize>>>(*loc_map,VB_keys_loc_D, for_motion_planner, rbt_r2_grids);
 }
 }

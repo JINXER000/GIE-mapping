@@ -7,7 +7,8 @@
 
 namespace PNTCLD_RAYCAST
 {
-void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param, int3* VB_keys_loc_D, int time);
+void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param,
+                     int3* VB_keys_loc_D, int time, bool for_motion_planner, int rbt_r2_grids);
 }
 
 #endif // PNTCLD_INTERFACES_H

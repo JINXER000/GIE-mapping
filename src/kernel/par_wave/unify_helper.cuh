@@ -34,7 +34,8 @@ void getUpdatedAddr(int3* stream_VB_keys_D,VoxelBlock** stream_VB_vals_D,
 
 __global__
 void updateHashOGMWithPntCld(LocMap loc_map, HASH_BASE hash_base, const int time,
-                             bool stream_glb_ogm, int3* stream_VB_keys_D, int* changed_cnt)
+                             bool stream_glb_ogm, int3* stream_VB_keys_D, int* changed_cnt,
+                             int ext_obs_num, bool* obs_activated, float3* obsbbx_ll, float3* obsbbx_ur)
 {
     int3 loc_crd;
     loc_crd.z = blockIdx.x;
@@ -63,23 +64,40 @@ void updateHashOGMWithPntCld(LocMap loc_map, HASH_BASE hash_base, const int time
         GlbVoxel* cur_vox = retrive_vox_D(glb_crd, Vb);
 
         char old_glb_type = cur_vox->vox_type;
-        // update observed occ val
-        if(count!=0)
-        {
-            if (count > 0)
-            {
-                set_hashvoxel_occ_val(cur_vox,250.f, 1.f, loc_map._occu_thresh, time);
-            }
 
-            if (count < 0)
+        // if outside outbbx and inside obs_bbx, set as occupied
+        float3 glb_pos=loc_map.coord2pos(glb_crd);
+        bool occ_flag = false;
+
+
+        if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
+        {
+            occ_flag = true;
+        }else
+        {
+            for(int i=1; i<ext_obs_num; i++)
             {
-                float pbty = min(1.f,static_cast<float>(-count)/10.f);
-                set_hashvoxel_occ_val(cur_vox,0.f,pbty,loc_map._occu_thresh, time);
+                if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                {
+                    occ_flag = true;
+                    break;
+                }
             }
         }
 
-        // set val back for local edt
+        // update observed occ val from sensor/ext observ
+        if (count > 0 || occ_flag)
+        {
+            set_hashvoxel_occ_val(cur_vox,250.f, 1.f, loc_map._occu_thresh, time);
+        }
+        else if (count < 0)
+        {
+            float pbty = min(1.f,static_cast<float>(-count)/10.f);
+            set_hashvoxel_occ_val(cur_vox,0.f,pbty,loc_map._occu_thresh, time);
+        }
 
+
+        // set val back for local edt
         loc_map.set_vox_glb_type(loc_crd, cur_vox->vox_type);
 
         if(!stream_glb_ogm)
@@ -99,7 +117,8 @@ void updateHashOGMWithPntCld(LocMap loc_map, HASH_BASE hash_base, const int time
 
 __global__
 void updateHashOGMWithSensor(LocMap loc_map, HASH_BASE hash_base, const int time,
-                             bool stream_glb_ogm, int3* stream_VB_keys_D, int* changed_cnt)
+                             bool stream_glb_ogm, int3* stream_VB_keys_D, int* changed_cnt,
+                             int ext_obs_num, bool* obs_activated, float3* obsbbx_ll, float3* obsbbx_ur)
 {
     int3 loc_crd;
     loc_crd.z = blockIdx.x;
@@ -123,23 +142,40 @@ void updateHashOGMWithSensor(LocMap loc_map, HASH_BASE hash_base, const int time
             loc_map.set_vox_glb_type(loc_crd,VOXTYPE_UNKNOWN);
             continue;
         }
+
+        // if outside outbbx and inside obs_bbx, set as occupied
+        float3 glb_pos=loc_map.coord2pos(glb_crd);
+        bool occ_flag = false;
+        if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
+        {
+            occ_flag = true;
+        }else
+        {
+            for(int i=1; i<ext_obs_num; i++)
+            {
+                if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                {
+                    occ_flag = true;
+                    break;
+                }
+            }
+        }
+
         VoxelBlock* Vb= &(hash_base.alloc[alloc_id]);
         GlbVoxel* cur_vox = retrive_vox_D(glb_crd, Vb);
 
         char old_glb_type = cur_vox->vox_type;
         // update observed occ val
-        if(new_vox_type!=VOXTYPE_UNKNOWN)
-        {
-            if (new_vox_type == VOXTYPE_OCCUPIED)
-            {
-                set_hashvoxel_occ_val(cur_vox,250.f, 0.8f, loc_map._occu_thresh, time);
-            }
 
-            if (new_vox_type == VOXTYPE_FREE)
-            {
-                set_hashvoxel_occ_val(cur_vox,0.f,0.5f,loc_map._occu_thresh, time);
-            }
+        if (new_vox_type == VOXTYPE_OCCUPIED || occ_flag)
+        {
+            set_hashvoxel_occ_val(cur_vox,250.f, 0.8f, loc_map._occu_thresh, time);
         }
+        else if (new_vox_type == VOXTYPE_FREE)
+        {
+            set_hashvoxel_occ_val(cur_vox,0.f,0.5f,loc_map._occu_thresh, time);
+        }
+
 
         // set val back for local edt
 

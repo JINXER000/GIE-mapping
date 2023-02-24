@@ -10,7 +10,7 @@ ugv_height: 1
 # profile the rms every time the visualization msg is published
 profile_loc_rms: false
 profile_glb_rms: false
-log_name: "test.csv"
+log_name: "ugv-005-glb.csv"
 
 occupancy_threshold: 180
 
@@ -25,8 +25,7 @@ ogm:
   max_height: 10
 
 wave:
-  fast_mode: false
-  cutoff_dist: 2
+  cutoff_dist: 100
 
 # params of hash table
 hash:

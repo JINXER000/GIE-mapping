@@ -31,11 +31,11 @@ alt="GIE-mapping  introduction video" width="480" height="270" /></a>
 
 ## Supported data input:
 
-- Any sensor outputs pointcloud
+- Any sensor outputs pointcloud (e.g., OS32 LiDAR, Mid360)
 - Depth camera
 - 2D LiDAR
 - 3D LiDAR
-- Priori knowledge (comming soon)
+- Priori knowledge 
 
 Please cite our paper if you use this project in your research:
 
@@ -176,6 +176,13 @@ The system extracts low-level frontiers for exploration. The data type of **VOXT
 ### Signed distance 
 Developing
 
+### Virtual fence 
+Revise the prebuilt map in parameters.h. Note that obsbbx_ll and obsbbx_ur are the lower-left corner and upper-right corner of the flyable region. 
+
+### External observer:
+Publish a pointcloud in topic "forbid_reg_cloud".
+If the pointcloud is 3D, please set **is_ext_obsv_3D** as true. Otherwise, the height of external observed obstacle is 0.2m~2.6m.
+
 # Docker Support
 
 To make the installation and development of GIE-mapping easier, the docker-based installation is introduced for Nvidia Xavier NX. Users only need to pull the image from [docker hub](hub.docker.com), and use the provided scripts to finish the installation easily.
@@ -226,6 +233,9 @@ As reported in  [issue 1](https://github.com/JINXER000/GIE-mapping/issues/1), th
 
 
 # Change log
+### Feb 20, 2023
+- Flight success with Mid360
+- Prior knowledge is partially supported
 ### Oct 21, 2022
 - Add Docker support
 - Remove hard-code logging directory. 

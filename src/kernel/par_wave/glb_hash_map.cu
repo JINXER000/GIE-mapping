@@ -9,7 +9,7 @@
 GlbHashMap::GlbHashMap(int bdr_size, int3 loc_dim, int bucket_max, int block_max)
 {
     int loc_volume_size = loc_dim.x*loc_dim.y*loc_dim.z;
-    int max_keys_in_local = (loc_dim.x/VB_WIDTH+1)* (loc_dim.y/VB_WIDTH+1)*(loc_dim.z/VB_WIDTH+1);
+    int max_keys_in_local = (loc_dim.x/VB_WIDTH+2)* (loc_dim.y/VB_WIDTH+2)*(loc_dim.z/VB_WIDTH+2);
     require_alloc_keys_D.resize(max_keys_in_local);
     success_alloc_D.resize(max_keys_in_local+1);
 
@@ -112,7 +112,8 @@ void GlbHashMap::allocHashTB()
 
 }
 
-void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream_glb_ogm)
+void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream_glb_ogm,
+                               Ext_Obs_Wrapper* ext_obsv)
 {
 
     allocHashTB();
@@ -122,12 +123,20 @@ void GlbHashMap::updateHashOGM(bool input_pyntcld, const int map_ct, bool stream
     {
         updateHashOGMWithPntCld<<<gridSize,blkSize>>>(*_lMap, *hash_table_D, map_ct,stream_glb_ogm,
                                                       raw_pointer_cast(&stream_VB_keys_D[0]),
-                                                      raw_pointer_cast(&changed_cnt[0]));
+                                                      raw_pointer_cast(&changed_cnt[0]),
+                                                      ext_obsv->ext_obs_num,
+                                                      raw_pointer_cast(&(ext_obsv->obs_activated[0])),
+                                                      raw_pointer_cast(&(ext_obsv->obsbbx_ll_D[0])),
+                                                      raw_pointer_cast(&(ext_obsv->obsbbx_ur_D[0])));
     }else
     {
         updateHashOGMWithSensor<<<gridSize,blkSize>>>(*_lMap, *hash_table_D, map_ct,stream_glb_ogm,
                                                       raw_pointer_cast(&stream_VB_keys_D[0]),
-                                                      raw_pointer_cast(&changed_cnt[0]));
+                                                      raw_pointer_cast(&changed_cnt[0]),
+                                                      ext_obsv->ext_obs_num,
+                                                      raw_pointer_cast(&(ext_obsv->obs_activated[0])),
+                                                      raw_pointer_cast(&(ext_obsv->obsbbx_ll_D[0])),
+                                                      raw_pointer_cast(&(ext_obsv->obsbbx_ur_D[0])));
 
     }
 
@@ -172,7 +181,7 @@ void GlbHashMap::mergeNewObsv(const int map_ct, const bool display_glb_edt)
         thrust::fill(frontierA.begin(),frontierA.end(),EMPTY_KEY);
         fB_num_raw = waveA->aux_num_shared[0];
 
-        waveB->f_num_shared[0] = fB_num_raw;
+    waveB->f_num_shared[0] = fB_num_raw;
         waveB->aux_num_shared[0] = fC_num_raw;
         parWave<LocMap>(raw_pointer_cast(&frontierB[0]), raw_pointer_cast(&frontierC[0]),
                         num_dirs_6, dirs_6_D, map_ct,

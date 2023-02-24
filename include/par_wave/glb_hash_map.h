@@ -6,6 +6,7 @@
 #include "voxmap_utils.cuh"
 #include "frontier_wrapper.h"
 #include "map_structure/local_batch.h"
+#include "map_structure/pre_map.h"
 
 struct GlbHashMap {
 public:
@@ -16,7 +17,8 @@ public:
 
     void allocHashTB();
 
-    void updateHashOGM(bool input_pynt, const int map_ct, bool stream_glb_ogm);
+    void updateHashOGM(bool input_pynt, const int map_ct, bool stream_glb_ogm,
+                       Ext_Obs_Wrapper* ext_obsv);
 
     void streamD2H(int changed_cnt_condense);
 
