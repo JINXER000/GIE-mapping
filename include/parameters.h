@@ -3,6 +3,7 @@
 #define SRC_PARAMETERS_H
 #include <ros/ros.h>
 #include <ros/package.h>
+#include <XmlRpcValue.h>
 // user defines for developer
 
 /*!
@@ -62,6 +63,29 @@ struct Parameters
     std::vector<float3> obsbbx_ll, obsbbx_ur;
     bool is_ext_obsv_3D;
 
+    // pre-defined clear regions for Ruoyu
+    std::vector<float3> freeBBX_ll, freeBBX_ur;
+
+
+    int load_f3_list(XmlRpc::XmlRpcValue& xmlVal, std::vector<float3>& f3_list )
+    {
+        int elem_size = -1;
+        if (xmlVal.getType() == XmlRpc::XmlRpcValue::TypeArray)
+        {
+            elem_size = xmlVal.size();
+            f3_list.resize(elem_size);
+            for(int i=0; i<elem_size; i++)
+            {
+                XmlRpc::XmlRpcValue bbx = xmlVal[i];
+                double bbx_x = bbx[0];
+                double bbx_y = bbx[1];
+                double bbx_z = bbx[2];
+                f3_list[i] = make_float3(bbx_x,bbx_y, bbx_z);
+            }
+        }
+        return elem_size;
+    }
+
     /**
      * Load all parameters
      * @param nh
@@ -70,9 +94,9 @@ struct Parameters
     {
         // General
         nh.param<bool>("GIE_mapping/for_motion_planner",for_motion_planner,false);
-        nh.param<bool>("GIE_mapping/display_glb_edt",display_glb_edt,true);
+        nh.param<bool>("GIE_mapping/display_glb_edt",display_glb_edt,false);
         nh.param<bool>("GIE_mapping/display_glb_ogm",display_glb_ogm,true);
-        nh.param<bool>("GIE_mapping/display_loc_edt",display_loc_edt,false);
+        nh.param<bool>("GIE_mapping/display_loc_edt",display_loc_edt,true);
         nh.param<bool>("GIE_mapping/display_loc_ogm",display_loc_ogm,false);
         nh.param<bool>("GIE_mapping/profile_loc_rms",profile_loc_rms,false);
         nh.param<bool>("GIE_mapping/profile_glb_rms",profile_glb_rms,false);
@@ -118,17 +142,23 @@ struct Parameters
         }
 
         nh.param<bool>("GIE_mapping/is_ext_obsv_3D",is_ext_obsv_3D,false);
-        // hard code of ext obs
-        obsbbx_ll.resize(1);
-        obsbbx_ur.resize(1);
-        obsbbx_ll[0] = make_float3(-3.6, -3.2, 0.2);
-        obsbbx_ur[0] = make_float3(4.4,3.4,2.6);
-        // obsbbx_ll[1] = make_float3(-3.4, -3, 0.2);
-        // obsbbx_ur[1] = make_float3(-2.2,-2.2,2.6);
-        // obsbbx_ll[2] = make_float3(2.2, -3.2, 0.2);
-        // obsbbx_ur[2] = make_float3(4.0,-1.6,2.6);
-        // obsbbx_ll[3] = make_float3(-0.8, 1.2, 0.2);
-        // obsbbx_ur[3] = make_float3(-0.2,3.0,2.6);
+
+
+        int pre_obs_num, tmp_size;
+
+        XmlRpc::XmlRpcValue pre_obs_bbx_ll, pre_obs_bbx_ur;
+        nh.getParam("GIE_mapping/pre_obs_bbx_ll", pre_obs_bbx_ll);
+        tmp_size = load_f3_list(pre_obs_bbx_ll, obsbbx_ll);
+        assert(tmp_size>0);
+        pre_obs_num = tmp_size;
+
+        nh.getParam("GIE_mapping/pre_obs_bbx_ur", pre_obs_bbx_ur);
+        tmp_size = load_f3_list(pre_obs_bbx_ur, obsbbx_ur);
+        assert(tmp_size==pre_obs_num);
+
+
+        std::cout<< pre_obs_num <<" presumed obstacles, "<<std::endl;
+
     }
 
     int flt2GridsSq(float rad)

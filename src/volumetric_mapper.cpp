@@ -13,7 +13,6 @@ VOLMAPNODE::VOLMAPNODE()
 
     ext_obs = new Ext_Obs_Wrapper(param.obsbbx_ur.size());
     ext_obs->assign_obs_premap(param.obsbbx_ll, param.obsbbx_ur);
-//    ext_obs->bbx_H2D();
 
     // Subscriber
     if(param.data_case == "ugv_corridor" )

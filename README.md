@@ -177,7 +177,7 @@ The system extracts low-level frontiers for exploration. The data type of **VOXT
 Developing
 
 ### Virtual fence 
-Revise the prebuilt map in parameters.h. Note that obsbbx_ll and obsbbx_ur are the lower-left corner and upper-right corner of the flyable region. 
+Revise the prebuilt map in ext_obsv.yaml. Note that pre_obs_bbx_ll and pre_obs_bbx_ur are the lower-left corner and upper-right corner of the flyable region. 
 
 ### External observer:
 Publish a pointcloud in topic "forbid_reg_cloud".
