@@ -81,7 +81,8 @@ void freeLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj, int pnt_sz, in
 
 
 __global__
-void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_sz, int time)
+void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_sz, int time,
+                    int ext_free_num, float3* freeBBX_ll, float3* freeBBX_ur)
 {
     int ring_id = blockIdx.x;
     int scan_id = threadIdx.x;
@@ -91,7 +92,19 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
         return;
 
     float3 glb_pos = proj.L2G*pnt_cld[id];
-    if (glb_pos.z >= loc_map._update_min_h && glb_pos.z <= loc_map._update_max_h)
+    bool within_height_limit = glb_pos.z >= loc_map._update_min_h && glb_pos.z <= loc_map._update_max_h;
+    bool inside_clear_AABB = false;
+
+    for  (int i=0; i< ext_free_num; i++)
+    {
+        if(insideAABB( glb_pos, freeBBX_ll[i], freeBBX_ur[i]))
+        {
+            inside_clear_AABB = true;
+            break;
+        }
+    }
+
+    if (within_height_limit && !inside_clear_AABB)
     {
         int3 glb_crd = loc_map.pos2coord(glb_pos);
         int3 loc_crd = loc_map.glb2loc(glb_crd);
@@ -103,10 +116,14 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
 
 
 void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldParam param,
-                     int3* VB_keys_loc_D, int time, bool for_motion_planner, int rbt_r2_grids)
+                     int3* VB_keys_loc_D, int time, bool for_motion_planner, int rbt_r2_grids,
+                     Ext_Obs_Wrapper* ext_obsv)
 {
     // Register the point clouds
-    registerLocObs<<<param.valid_pnt_count/256+1, 256>>>(*loc_map,pnt_cld,proj,param.valid_pnt_count,time);
+    registerLocObs<<<param.valid_pnt_count/256+1, 256>>>(*loc_map,pnt_cld,proj,param.valid_pnt_count,time,
+                                                         ext_obsv->ext_free_num,
+                                                         raw_pointer_cast(&(ext_obsv->freeBBX_ll_D[0])),
+                                                         raw_pointer_cast(&(ext_obsv->freeBBX_ur_D[0])));
 
     // Free the empty areas
     freeLocObs<<<param.valid_pnt_count/256+1, 256>>>(*loc_map,pnt_cld,proj,param.valid_pnt_count,time);
@@ -114,5 +131,6 @@ void localOGMKernels(LocMap* loc_map, float3 *pnt_cld, Projection proj, PntcldPa
     const int gridSize = loc_map->_local_size.z;
     const int blkSize = loc_map->_local_size.y;
     getAllocKeys<<<gridSize,blkSize>>>(*loc_map,VB_keys_loc_D, for_motion_planner, rbt_r2_grids);
+
 }
 }

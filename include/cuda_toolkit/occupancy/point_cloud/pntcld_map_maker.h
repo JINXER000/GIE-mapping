@@ -5,6 +5,7 @@
 #include <cuda_toolkit/projection.h>
 #include <sensor_msgs/PointCloud2.h>
 #include "map_structure/local_batch.h"
+#include "map_structure/pre_map.h"
 
 class PntcldMapMaker
 {
@@ -15,7 +16,8 @@ public:
     void initialize(const sensor_msgs::PointCloud2::ConstPtr& msg);
     void setLocMap(LocMap *lMap);
     void updateLocalOGM(const Projection& proj,const sensor_msgs::PointCloud2::ConstPtr &msg,
-                        int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids);
+                        int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids,
+                        Ext_Obs_Wrapper* ext_obsv);
     bool is_initialized(){return _initialized;}
 
     void pntcld_process(const sensor_msgs::PointCloud2ConstPtr& msg);

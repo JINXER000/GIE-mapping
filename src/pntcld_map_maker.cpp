@@ -61,7 +61,8 @@ void PntcldMapMaker::pntcld_process(const sensor_msgs::PointCloud2ConstPtr& msg)
 }
 
 void PntcldMapMaker::updateLocalOGM(const Projection& proj,const sensor_msgs::PointCloud2::ConstPtr &msg,
-                                    int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids)
+                                    int3* VB_keys_loc_D, const int time, bool for_motion_planner, int rbt_r2_grids,
+                                    Ext_Obs_Wrapper* ext_obsv)
 {
     // Copy the data from point cloud to multiple scans
     pntcld_process(msg);
@@ -69,5 +70,6 @@ void PntcldMapMaker::updateLocalOGM(const Projection& proj,const sensor_msgs::Po
     // Copy the scan into gpu buffer
     GPU_MEMCPY_H2D(_gpu_cld,_cpu_cld,_cld_byte_sz);
 
-    PNTCLD_RAYCAST::localOGMKernels(_lMap,_gpu_cld,proj,_pnt_param,VB_keys_loc_D,time, for_motion_planner, rbt_r2_grids);
+    PNTCLD_RAYCAST::localOGMKernels(_lMap,_gpu_cld,proj,_pnt_param,VB_keys_loc_D,time, for_motion_planner, rbt_r2_grids,
+                                    ext_obsv);
 }

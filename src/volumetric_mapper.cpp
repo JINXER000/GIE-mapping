@@ -11,8 +11,9 @@ VOLMAPNODE::VOLMAPNODE()
     // Publisher
     edt_msg_pub = _nh.advertise<GIE::CostMap> ("cost_map", 1);
 
-    ext_obs = new Ext_Obs_Wrapper(param.obsbbx_ur.size());
+    ext_obs = new Ext_Obs_Wrapper(param.obsbbx_ll.size(), param.freeBBX_ll.size());
     ext_obs->assign_obs_premap(param.obsbbx_ll, param.obsbbx_ur);
+    ext_obs->assign_free_premap(param.freeBBX_ll, param.freeBBX_ur);
 //    ext_obs->bbx_H2D();
 
     // Subscriber
@@ -172,7 +173,8 @@ void VOLMAPNODE::publishMap(const ros::TimerEvent&)
         }else
         {
             _pnt_map_maker.updateLocalOGM(proj,_pntcld_ptr, thrust::raw_pointer_cast(_hash_map->VB_keys_loc_D.data()), _time,
-                                          param.for_motion_planner, param.robot_r2_grids);
+                                          param.for_motion_planner, param.robot_r2_grids,
+                                          ext_obs);
         }
     }
 
