@@ -66,31 +66,35 @@ void updateHashOGMWithPntCld(LocMap loc_map, HASH_BASE hash_base, const int time
         char old_glb_type = cur_vox->vox_type;
 
         // if outside outbbx and inside obs_bbx, set as occupied
-        float3 glb_pos=loc_map.coord2pos(glb_crd);
         bool occ_flag = false;
 
 
-        if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
+        float3 glb_pos=loc_map.coord2pos(glb_crd);
+        if (ext_obs_num >0)
         {
-            occ_flag = true;
-        }else
-        {
-            for(int i=1; i<ext_obs_num; i++)
+            if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
             {
-                if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                occ_flag = true;
+            }else
+            {
+                for(int i=1; i<ext_obs_num; i++)
                 {
-                    occ_flag = true;
-                    break;
+                    if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                    {
+                        occ_flag = true;
+                        break;
+                    }
                 }
             }
         }
 
-        // update observed occ val from sensor/ext observ
+
+        // (update observed occ val from sensor  AND this region is not cleared) OR ext observ
         if (count > 0 || occ_flag)
         {
             set_hashvoxel_occ_val(cur_vox,250.f, 1.f, loc_map._occu_thresh, time);
         }
-        else if (count < 0)
+        else if (count < 0 )
         {
             float pbty = min(1.f,static_cast<float>(-count)/10.f);
             set_hashvoxel_occ_val(cur_vox,0.f,pbty,loc_map._occu_thresh, time);
@@ -144,22 +148,27 @@ void updateHashOGMWithSensor(LocMap loc_map, HASH_BASE hash_base, const int time
         }
 
         // if outside outbbx and inside obs_bbx, set as occupied
-        float3 glb_pos=loc_map.coord2pos(glb_crd);
         bool occ_flag = false;
-        if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
+
+        if (ext_obs_num >0)
         {
-            occ_flag = true;
-        }else
-        {
-            for(int i=1; i<ext_obs_num; i++)
+            float3 glb_pos=loc_map.coord2pos(glb_crd);
+            if(obs_activated[0] && !insideAABB(glb_pos, obsbbx_ll[0], obsbbx_ur[0]))
             {
-                if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                occ_flag = true;
+            }else
+            {
+                for(int i=1; i<ext_obs_num; i++)
                 {
-                    occ_flag = true;
-                    break;
+                    if(obs_activated[i] && insideAABB(glb_pos, obsbbx_ll[i], obsbbx_ur[i]))
+                    {
+                        occ_flag = true;
+                        break;
+                    }
                 }
             }
         }
+
 
         VoxelBlock* Vb= &(hash_base.alloc[alloc_id]);
         GlbVoxel* cur_vox = retrive_vox_D(glb_crd, Vb);

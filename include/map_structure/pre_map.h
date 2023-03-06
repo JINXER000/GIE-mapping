@@ -31,7 +31,7 @@ public:
 
     void assign_obs_premap(std::vector<float3>& preobs_ll, std::vector<float3>& preobs_ur);
     void append_new_elem(float3& ll_coord, float3& ur_coord);
-    void bbx_H2D();
+    bool bbx_H2D();
 
     void assign_free_premap(std::vector<float3>& preFree_ll, std::vector<float3>& preFree_ur);
     void change_free_num(int free_num);

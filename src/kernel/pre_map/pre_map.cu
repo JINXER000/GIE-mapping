@@ -57,8 +57,14 @@ void Ext_Obs_Wrapper::append_new_elem(float3& ll_coord, float3& ur_coord)
 
 }
 
-void Ext_Obs_Wrapper::bbx_H2D()
+// return: if there is obs in pre-map.
+bool Ext_Obs_Wrapper::bbx_H2D()
 {
+    if (rt_obsbbx_ll.size() == 0)
+    {
+        return false;
+    }
+
     if(ext_obs_num != rt_obsbbx_ll.size())
     {
         change_obs_num(rt_obsbbx_ll.size());
@@ -67,13 +73,18 @@ void Ext_Obs_Wrapper::bbx_H2D()
     thrust::copy(rt_obsbbx_ll.begin(), rt_obsbbx_ll.end(), obsbbx_ll_D.begin());
     thrust::copy(rt_obsbbx_ur.begin(), rt_obsbbx_ur.end(), obsbbx_ur_D.begin());
 
-
+    if (rt_freeBBX_ll.size() == 0)
+    {
+        return true;
+    }
     if(ext_free_num != rt_freeBBX_ll.size())
     {
         change_free_num(rt_freeBBX_ll.size());
     }
     thrust::copy(rt_freeBBX_ll.begin(), rt_freeBBX_ll.end(), freeBBX_ll_D.begin());
     thrust::copy(rt_freeBBX_ur.begin(), rt_freeBBX_ur.end(), freeBBX_ur_D.begin());
+
+    return true;
 }
 
 void Ext_Obs_Wrapper::change_obs_num(int obs_num)
@@ -106,8 +117,12 @@ bool Ext_Obs_Wrapper::CheckAABBIntersection(float3& A_ll, float3& A_ur, float3& 
 
 void Ext_Obs_Wrapper::activate_AABB(float3& loc_map_ll, float3& loc_map_ur)
 {
-    bbx_H2D();
+    bool require_activate = bbx_H2D();
 
+    if (!require_activate)
+    {
+        return;
+    }
     // outmost bbx
     obs_activated[0] = false;
 

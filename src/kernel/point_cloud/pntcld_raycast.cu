@@ -95,6 +95,7 @@ void registerLocObs(LocMap loc_map, float3 *pnt_cld, Projection proj,  int pnt_s
     bool within_height_limit = glb_pos.z >= loc_map._update_min_h && glb_pos.z <= loc_map._update_max_h;
     bool inside_clear_AABB = false;
 
+    // clean for collision map
     for  (int i=0; i< ext_free_num; i++)
     {
         if(insideAABB( glb_pos, freeBBX_ll[i], freeBBX_ur[i]))

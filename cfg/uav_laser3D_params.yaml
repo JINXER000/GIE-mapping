@@ -1,4 +1,4 @@
-for_motion_planner: true
+for_motion_planner: false
 display_loc_edt: true
 display_loc_ogm: false
 display_glb_edt: false
